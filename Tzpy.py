@@ -6,8 +6,56 @@ import weather_api as wa  # Project weather helpers.
 import currency as cu  # Project currency helpers.
 
 result = ""  # Last converted timestamp shown in the UI.
-text_widgets = []  # Reserved hooks for theme updates.
-input_widgets = []  # Reserved hooks for theme updates.
+text_widgets = []  # Reserved hooks for static text theme updates.
+input_widgets = []  # Reserved hooks for input/theme updates.
+button_widgets = []  # Reserved hooks for button-specific theming.
+last_text_mode = "light"
+# --- Background Image System ---
+bg_bitmap = None
+
+# Time-of-day bucket + rain flag
+current_time_bucket = "night"
+current_weather_is_rainy = False
+
+# Mapping (time_bucket, rainy?) -> image path
+BACKGROUND_IMAGES = {
+    ("pre_dawn", False): "images/night_clear_1.png",
+    ("pre_dawn", True):  "images/night_rain_1.png",
+
+    ("sunrise", False):  "images/morning_clear_1.png",
+    ("sunrise", True):   "images/morning_rain_1.png",
+
+    ("morning", False):  "images/morning_clear_1.png",
+    ("morning", True):   "images/morning_rain_1.png",
+
+    ("day", False):      "images/day_clear_1.png",
+    ("day", True):       "images/day_rain_1.png",
+
+    ("evening", False):  "images/evening_clear_1.png",
+    ("evening", True):   "images/evening_rain_1.png",
+
+    ("night", False):    "images/night_clear_1.png",
+    ("night", True):     "images/night_rain_1.png",
+}
+
+# Anime-inspired font styling
+BASE_FONT_NAME = "Segoe Print"  # Soft handwritten font available on Windows.
+
+
+def apply_anime_font(widget, size=11, weight=wx.FONTWEIGHT_NORMAL):
+    """Apply a playful handwritten font to the given widget."""
+    try:
+        font = wx.Font(  # Attempt preferred handwritten face first.
+            pointSize=size,
+            family=wx.FONTFAMILY_SWISS,
+            style=wx.FONTSTYLE_NORMAL,
+            weight=weight,
+            underline=False,
+            faceName=BASE_FONT_NAME,
+        )
+    except Exception:
+        font = wx.Font(pointSize=size, family=wx.FONTFAMILY_SWISS, style=wx.FONTSTYLE_NORMAL, weight=weight)  # Fallback if font missing.
+    widget.SetFont(font)  # Apply the resolved font to the widget.
 
 
 def time_zone_converter(time_str, from_tz, to_tz, time_format="%Y-%m-%d %H:%M:%S"):
@@ -21,85 +69,84 @@ def time_zone_converter(time_str, from_tz, to_tz, time_format="%Y-%m-%d %H:%M:%S
 
     return converted_time.strftime(time_format)  # Return a string using the original format for UI display.
 
-def back_fore_ground(bg_color, text_mode):
-    """Paint the panel and widgets using a day/night palette."""
-    panel.SetBackgroundColour(bg_color)  # Apply the global backdrop color.
-    if text_mode == "light":
-        text_color = wx.Colour(245, 245, 245)  # Light text for labels.
-        item_text = wx.Colour(25, 25, 25)  # Dark text for inputs.
-        item_bg = wx.Colour(250, 250, 250)  # Soft input background.
+def back_fore_ground(text_mode):
+    """Apply background image and UI text colors."""
+    global bg_bitmap, current_time_bucket, current_weather_is_rainy, last_text_mode
+    last_text_mode = text_mode
+    key = (current_time_bucket, current_weather_is_rainy)
+    img_path = BACKGROUND_IMAGES.get(key)
+
+    if img_path and bg_bitmap is not None:
+        try:
+            # Get current panel size
+            w, h = panel.GetClientSize()
+
+            img = wx.Image(img_path, wx.BITMAP_TYPE_ANY)
+            # Avoid 0-size crashes on initial load
+            if w > 0 and h > 0:
+                img = img.Scale(w, h, wx.IMAGE_QUALITY_HIGH)
+
+            bmp = wx.Bitmap(img)
+            bg_bitmap.SetBitmap(bmp)
+            bg_bitmap.SetSize((w, h))
+            bg_bitmap.SetPosition((0, 0))
+            bg_bitmap.Lower()
+            panel.Refresh()
+        except Exception as e:
+            print("Error loading image:", img_path, e)
+
+    # Keep the main panel white regardless of the active mode for a clean base layer.
+    if "panel" in globals():
+        try:
+            panel.SetBackgroundColour(wx.Colour(255, 255, 255))
+        except Exception:
+            pass
+
+
+def set_time_bucket_from_time(t_obj):
+    """Update time bucket and reapply background."""
+    global current_time_bucket
+
+    if time(0, 0, 0) <= t_obj < time(4, 0, 0):
+        current_time_bucket = "pre_dawn"
+        mode = "light"
+    elif time(4, 0, 0) <= t_obj < time(6, 0, 0):
+        current_time_bucket = "sunrise"
+        mode = "light"
+    elif time(6, 0, 0) <= t_obj < time(10, 0, 0):
+        current_time_bucket = "morning"
+        mode = "dark"
+    elif time(10, 0, 0) <= t_obj < time(17, 0, 0):
+        current_time_bucket = "day"
+        mode = "dark"
+    elif time(17, 0, 0) <= t_obj < time(20, 0, 0):
+        current_time_bucket = "evening"
+        mode = "dark"
     else:
-        text_color = wx.Colour(32, 32, 32)  # Dark labels for bright backgrounds.
-        item_text = wx.Colour(25, 25, 25)  # Matching dark text for inputs.
-        item_bg = wx.Colour(255, 255, 255)  # Bright input background.
+        current_time_bucket = "night"
+        mode = "light"
 
-    for text in texts:
-        text.SetForegroundColour(text_color)  # Update every label/button with the chosen color.
-
-    for item in variables:
-        item.SetForegroundColour(item_text)  # Sync interactive text color.
-        item.SetBackgroundColour(item_bg)  # Sync interactive background color.
-
-    panel.Refresh()  # Force redraw so colors take effect immediately.
-
+    back_fore_ground(mode)
 
 def time_background_converter_output():
     """Repaint the UI based on the converted time-of-day bucket."""
     if not result:
         return
     try:
-        time_result = datetime.strptime(result, "%Y-%m-%d %H:%M:%S").time()
+        t = datetime.strptime(result, "%Y-%m-%d %H:%M:%S").time()
+        set_time_bucket_from_time(t)
     except ValueError:
         return
 
-    if time(0, 0, 0) <= time_result < time(4, 0, 0):
-        back_fore_ground(wx.Colour(6, 10, 28), "light")
-    elif time(4, 0, 0) <= time_result < time(6, 0, 0):
-        back_fore_ground(wx.Colour(28, 45, 85), "light")
-    elif time(6, 0, 0) <= time_result < time(8, 0, 0):
-        back_fore_ground(wx.Colour(250, 189, 120), "dark")
-    elif time(8, 0, 0) <= time_result < time(10, 0, 0):
-        back_fore_ground(wx.Colour(255, 209, 145), "dark")
-    elif time(10, 0, 0) <= time_result < time(12, 0, 0):
-        back_fore_ground(wx.Colour(255, 234, 185), "dark")
-    elif time(12, 0, 0) <= time_result < time(15, 0, 0):
-        back_fore_ground(wx.Colour(240, 244, 220), "dark")
-    elif time(15, 0, 0) <= time_result < time(17, 0, 0):
-        back_fore_ground(wx.Colour(248, 196, 130), "dark")
-    elif time(17, 0, 0) <= time_result < time(19, 0, 0):
-        back_fore_ground(wx.Colour(252, 140, 90), "dark")
-    elif time(19, 0, 0) <= time_result < time(22, 0, 0):
-        back_fore_ground(wx.Colour(54, 34, 70), "light")
-    else:
-        back_fore_ground(wx.Colour(8, 6, 26), "light")
 
 def time_background_converter_input():
     """Change the background immediately as the user edits the time string."""
     try:
-        time_input = datetime.strptime(inputdt.GetValue(), "%Y-%m-%d %H:%M:%S").time()
+        t = datetime.strptime(inputdt.GetValue(), "%Y-%m-%d %H:%M:%S").time()
+        set_time_bucket_from_time(t)
     except ValueError:
         return
 
-    if time(0, 0, 0) <= time_input < time(4, 0, 0):
-        back_fore_ground(wx.Colour(6, 10, 28), "light")
-    elif time(4, 0, 0) <= time_input < time(6, 0, 0):
-        back_fore_ground(wx.Colour(28, 45, 85), "light")
-    elif time(6, 0, 0) <= time_input < time(8, 0, 0):
-        back_fore_ground(wx.Colour(250, 189, 120), "dark")
-    elif time(8, 0, 0) <= time_input < time(10, 0, 0):
-        back_fore_ground(wx.Colour(255, 209, 145), "dark")
-    elif time(10, 0, 0) <= time_input < time(12, 0, 0):
-        back_fore_ground(wx.Colour(255, 234, 185), "dark")
-    elif time(12, 0, 0) <= time_input < time(15, 0, 0):
-        back_fore_ground(wx.Colour(240, 244, 220), "dark")
-    elif time(15, 0, 0) <= time_input < time(17, 0, 0):
-        back_fore_ground(wx.Colour(248, 196, 130), "dark")
-    elif time(17, 0, 0) <= time_input < time(19, 0, 0):
-        back_fore_ground(wx.Colour(252, 140, 90), "dark")
-    elif time(19, 0, 0) <= time_input < time(22, 0, 0):
-        back_fore_ground(wx.Colour(54, 34, 70), "light")
-    else:
-        back_fore_ground(wx.Colour(8, 6, 26), "light")
 
 
 def on_now(event):
@@ -114,10 +161,10 @@ def on_now(event):
 def simple_frame():
     """Sync globals with the latest widget values."""
     global time_str, from_tz, to_tz
-    time_str = inputdt.GetValue()
-    time_background_converter_input()
-    from_tz = fromtz.GetStringSelection()
-    to_tz = totz.GetStringSelection()
+    time_str = inputdt.GetValue()  # Cache the raw datetime string from the text control.
+    time_background_converter_input()  # Nudge the background preview each time the field changes.
+    from_tz = fromtz.GetStringSelection()  # Remember the currently chosen source timezone.
+    to_tz = totz.GetStringSelection()  # Remember the currently chosen destination timezone.
     
 def on_weather(event):
     """Validate inputs, fetch hourly weather for the target zone, and render a compact summary."""
@@ -139,6 +186,19 @@ def on_weather(event):
 
     try:
         weather = wa.get_weather_for_datetime(dt_str_local, tz_name)  # Delegate to Open-Meteo helper.
+        # Update raining status
+        global current_weather_is_rainy
+        current_weather_is_rainy = weather["precipitation"] > 0
+
+        # Reapply background with rain condition
+        try:
+            if result:
+                t_obj = datetime.strptime(result, "%Y-%m-%d %H:%M:%S").time()
+            else:
+                t_obj = datetime.strptime(dt_str_local, "%Y-%m-%d %H:%M:%S").time()
+            set_time_bucket_from_time(t_obj)
+        except Exception:
+            pass
         display_time = weather["time"].replace("T", " ")  # Present ISO string in a UI-friendly form.
         msg = (
             f"🌤 {weather['city']}, {weather['country']} @ {display_time}\n"
@@ -201,44 +261,84 @@ def on_convert(event):
         time_background_converter_output()
     except Exception:
         output.SetLabel("Error: Invalid input or timezone")
+def on_resize(event):
+    back_fore_ground(last_text_mode)  # Rescale background art to the new panel dimensions.
+    event.Skip()  # Allow default wx handling to continue.
 
 
 # ---------------- UI SETUP (wxPython) ---------------- #
+
+LEFT_MARGIN = 80
+CONTROL_WIDTH = 420
+CONTROL_HEIGHT = 32
+RIGHT_BUTTON_X = LEFT_MARGIN + CONTROL_WIDTH + 70
+BUTTON_WIDTH = 200
+BUTTON_HEIGHT = 38
+DISPLAY_WIDTH = 920
 
 timezones = pytz.all_timezones  # Populate dropdowns with every IANA zone.
 app = wx.App(False)
 frame = wx.Frame(
     None,
     title="Time, Weather & Currency Tool",
-    size=(750, 780),
-    style=wx.MINIMIZE_BOX | wx.SYSTEM_MENU | wx.CAPTION | wx.CLOSE_BOX
+    size=(1280, 720),
+    style=wx.DEFAULT_FRAME_STYLE
+          & ~( wx.MAXIMIZE_BOX | wx.RESIZE_BORDER)
 )
 panel = wx.Panel(frame, style=wx.SIMPLE_BORDER)
+panel.SetDoubleBuffered(True)
+bg_bitmap = wx.StaticBitmap(panel, -1, wx.Bitmap(1, 1), pos=(0, 0))
+bg_bitmap.Lower()  # Put it behind all other widgets
+panel.Bind(wx.EVT_SIZE, on_resize)
 
 # Time / Date
-show1 = wx.StaticText(panel, label="ENTER DATE & TIME", pos=(240, 55))
-inputdt = wx.TextCtrl(panel, pos=(220, 85), size=(280, 25), style=wx.SIMPLE_BORDER)
+show1 = wx.StaticText(panel, label="ENTER DATE & TIME", pos=(LEFT_MARGIN, 40))
+inputdt = wx.TextCtrl(panel, pos=(LEFT_MARGIN, 72), size=(CONTROL_WIDTH, CONTROL_HEIGHT), style=wx.SIMPLE_BORDER)
 inputdt.SetHint("YYYY-MM-DD HH:MM:SS e.g. 2007-02-22 12:00:00")
-nowtime = wx.Button(panel, label="CURRENT LOCAL", pos=(290, 120), size=(120, 30), style=wx.BORDER_RAISED)
+nowtime = wx.Button(
+    panel,
+    label="CURRENT LOCAL",
+    pos=(RIGHT_BUTTON_X, 70),
+    size=(BUTTON_WIDTH, BUTTON_HEIGHT),
+    style=wx.BORDER_RAISED,
+)
 
 # Timezones
-show4 = wx.StaticText(panel, label="Select Source and Target Timezones", pos=(235, 170))
-fromtz = wx.Choice(panel, choices=timezones, pos=(220, 200), size=(280, 30), style=wx.BORDER_SUNKEN)
-totz = wx.Choice(panel, choices=timezones, pos=(220, 240), size=(280, 30), style=wx.BORDER_SUNKEN)
+show4 = wx.StaticText(panel, label="Select Source and Target Timezones", pos=(LEFT_MARGIN, 135))
+fromtz = wx.Choice(panel, choices=timezones, pos=(LEFT_MARGIN, 165), size=(CONTROL_WIDTH, 34), style=wx.BORDER_SUNKEN)
+totz = wx.Choice(panel, choices=timezones, pos=(LEFT_MARGIN, 210), size=(CONTROL_WIDTH, 34), style=wx.BORDER_SUNKEN)
 
-convert = wx.Button(panel, label="CONVERT TIME", pos=(290, 280), size=(120, 30), style=wx.BORDER_RAISED)
-show5 = wx.StaticText(panel, label="CONVERTED TIME WILL APPEAR HERE ↓", pos=(230, 320), style=wx.SIMPLE_BORDER)
-output = wx.StaticText(panel, label="", pos=(50, 350), size=(650, 30), style=wx.SIMPLE_BORDER)
+convert = wx.Button(
+    panel,
+    label="CONVERT TIME",
+    pos=(RIGHT_BUTTON_X, 208),
+    size=(BUTTON_WIDTH, BUTTON_HEIGHT),
+    style=wx.BORDER_RAISED,
+)
+show5 = wx.StaticText(panel, label="CONVERTED TIME WILL APPEAR HERE ↓", pos=(LEFT_MARGIN, 270), style=wx.SIMPLE_BORDER)
+output = wx.StaticText(panel, label="", pos=(LEFT_MARGIN, 302), size=(DISPLAY_WIDTH, 40), style=wx.SIMPLE_BORDER)
 
 # Weather UI
-show_weather = wx.StaticText(panel, label="WEATHER (Uses target timezone city)", pos=(240, 390))
-weather_btn = wx.Button(panel, label="GET WEATHER", pos=(290, 420), size=(120, 30), style=wx.BORDER_RAISED)
-weather_output = wx.StaticText(panel, label="", pos=(50, 460), size=(650, 60), style=wx.SIMPLE_BORDER)
+show_weather = wx.StaticText(panel, label="WEATHER", pos=(LEFT_MARGIN, 360))
+weather_btn = wx.Button(
+    panel,
+    label="GET WEATHER",
+    pos=(RIGHT_BUTTON_X, 350),
+    size=(BUTTON_WIDTH, BUTTON_HEIGHT),
+    style=wx.BORDER_RAISED,
+)
+weather_output = wx.StaticText(panel, label="", pos=(LEFT_MARGIN, 395), size=(DISPLAY_WIDTH, 90), style=wx.SIMPLE_BORDER)
 
 # Currency UI (automatic from timezones + historical)
-show_currency = wx.StaticText(panel, label="CURRENCY (From timezones' countries, with history)", pos=(180, 535))
-currency_btn = wx.Button(panel, label="COMPARE 1 UNIT", pos=(290, 565), size=(120, 30), style=wx.BORDER_RAISED)
-currency_output = wx.StaticText(panel, label="", pos=(50, 605), size=(650, 100), style=wx.SIMPLE_BORDER)
+show_currency = wx.StaticText(panel, label="CURRENCY", pos=(LEFT_MARGIN, 510))
+currency_btn = wx.Button(
+    panel,
+    label="COMPARE 1 UNIT",
+    pos=(RIGHT_BUTTON_X, 500),
+    size=(BUTTON_WIDTH, BUTTON_HEIGHT),
+    style=wx.BORDER_RAISED,
+)
+currency_output = wx.StaticText(panel, label="", pos=(LEFT_MARGIN, 545), size=(DISPLAY_WIDTH, 110), style=wx.SIMPLE_BORDER)
 
 # Bindings
 inputdt.Bind(wx.EVT_TEXT, simple_frame)
@@ -250,7 +350,7 @@ weather_btn.Bind(wx.EVT_BUTTON, on_weather)
 currency_btn.Bind(wx.EVT_BUTTON, on_currency_convert)
 
 # Widgets participating in theme swaps
-texts = [
+text_widgets = [  # Static labels and outputs that follow theme colours.
     show1,
     show4,
     show5,
@@ -259,23 +359,39 @@ texts = [
     weather_output,
     show_currency,
     currency_output,
-    convert,
-    nowtime,
-    weather_btn,
-    currency_btn,
 ]
-variables = [
+input_widgets = [  # Controls that accept user input.
     inputdt,
     fromtz,
     totz,
+]
+button_widgets = [  # Action buttons that need consistent theming.
     convert,
     nowtime,
     weather_btn,
     currency_btn,
 ]
 
-frame.Show()
-app.MainLoop()
+for widget in text_widgets:
+    apply_anime_font(widget, size=12, weight=wx.FONTWEIGHT_MEDIUM)  # Use a slightly larger handwriting font for readability.
+
+for widget in input_widgets:
+    apply_anime_font(widget, size=11)  # Keep inputs compact but on-theme.
+
+for widget in button_widgets:
+    apply_anime_font(widget, size=11, weight=wx.FONTWEIGHT_BOLD)  # Bold buttons for emphasis.
+
+apply_anime_font(output, size=13, weight=wx.FONTWEIGHT_MEDIUM)  # Highlight the main conversion result.
+apply_anime_font(weather_output, size=12)  # Weather summary uses slightly larger text.
+apply_anime_font(currency_output, size=12)  # Currency summary matches weather text size.
+
+
+frame.Show()  # Display the fully configured window.
+
+# Force initial background + text colours so buttons are visible
+set_time_bucket_from_time(datetime.now().time())  # Kick off theme logic using the current local time bucket.
+
+app.MainLoop()  # Enter the wxPython event loop.
 
 
 # # Simple user input (legacy CLI demo)
