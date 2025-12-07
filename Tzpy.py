@@ -2,12 +2,13 @@ from datetime import datetime , time
 import pytz
 import wx
 from tzlocal import get_localzone_name
+import weather_api as wa
 
 result = ""
 text_widgets = []
 input_widgets = []
 
-def time_zone_converter(time_str, from_tz, to_tz, time_format="%H:%M:%S"):
+def time_zone_converter(time_str, from_tz, to_tz, time_format="%Y-%m-%d %H:%M:%S"):
     """
     Convert time between time zones using pytz
     """
@@ -51,7 +52,7 @@ def time_background_converter_output():
     if not result:
         return
     try:
-        time_result = datetime.strptime(result, "%H:%M:%S").time()
+        time_result = datetime.strptime(result, "%Y-%m-%d %H:%M:%S").time()
     except ValueError:
         return
 
@@ -78,7 +79,7 @@ def time_background_converter_output():
 
 def time_background_converter_input():
     try:
-        time_input = datetime.strptime(inputtime.GetValue(), "%H:%M:%S").time()
+        time_input = datetime.strptime(inputdt.GetValue(), "%Y-%m-%d %H:%M:%S").time()
     except ValueError:
         return
 
@@ -106,7 +107,7 @@ def time_background_converter_input():
 
 def on_now(event):
     now=datetime.now()
-    inputtime.SetValue(now.strftime("%H:%M:%S"))
+    inputdt.SetValue(now.strftime("%Y-%m-%d %H:%M:%S"))
     fromtz.SetStringSelection(get_localzone_name())
     time_background_converter_input()
     
@@ -114,10 +115,44 @@ def on_now(event):
 
 def simple_frame():
     global time_str,from_tz,to_tz
-    time_str=inputtime.GetValue()
+    time_str=inputdt.GetValue()
     time_background_converter_input()
     from_tz=fromtz.GetStringSelection()
     to_tz=totz.GetStringSelection()
+    
+def on_weather(event):
+    """
+    Weather at datetime in inputdt and timezone selected in totz (target TZ).
+    """
+    dt_str_local = inputdt.GetValue().strip()
+    if not dt_str_local:
+        weather_output.SetLabel("Error: Enter datetime (YYYY-MM-DD HH:MM:SS)")
+        return
+
+    tz_name = totz.GetStringSelection()
+    if not tz_name:
+        weather_output.SetLabel("Error: Select a target timezone (To TZ) for weather.")
+        return
+
+    # Validate datetime string
+    try:
+        datetime.strptime(dt_str_local, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        weather_output.SetLabel("Error: Invalid datetime format.")
+        return
+
+    try:
+        weather = wa.get_weather_for_datetime(dt_str_local, tz_name)
+        display_time = weather["time"].replace("T", " ")
+        msg = (
+            f"🌤 {weather['city']}, {weather['country']} @ {display_time}\n"
+            f"🌡 Temp: {weather['temperature']}°C   "
+            f"💧 Humidity: {weather['humidity']}%   "
+            f"🌧 Precip: {weather['precipitation']} mm"
+        )
+        weather_output.SetLabel(msg)
+    except Exception as e:
+        weather_output.SetLabel(f"Weather error: {e}")
 
     
 def on_convert(event):
@@ -130,32 +165,61 @@ def on_convert(event):
         time_background_converter_output()
     except Exception:
         output.SetLabel(f"Error: Invalid input or timezone")
+
     
         
-timezones=pytz.all_timezones
+# ---------------- UI SETUP (wxPython) ---------------- #
+
+timezones = pytz.all_timezones
 app = wx.App(False)
-frame=wx.Frame(None, title="Time Zone Convertor", size=(600, 500), style=wx.MINIMIZE_BOX | wx.SYSTEM_MENU | wx.CAPTION | wx.CLOSE_BOX)
-panel=wx.Panel(frame, style=wx.SIMPLE_BORDER)
-show2=wx.StaticText(panel,label="ENTER TIME ",pos=(165,55))
-inputtime=wx.TextCtrl(panel,pos=(200,130),size=(200,20),style=wx.SIMPLE_BORDER)
-inputtime.SetHint("HH:MM:SS e.g. 14:30:00")
-nowtime=wx.Button(panel,label="CURRENT TIME",pos=(240,160),size=(120,30),style=wx.BORDER_RAISED)
-show4=wx.StaticText(panel,label="Select Source and Target Timezones",pos=(175,200))
-fromtz=wx.Choice(panel,choices=timezones,pos=(200,230),size=(200,30),style=wx.BORDER_SUNKEN)
-totz=wx.Choice(panel,choices=timezones,pos=(200,270),size=(200,30),style=wx.BORDER_SUNKEN)
-convert=wx.Button(panel,label="CONVERT",pos=(240,315),size=(120,30),style=wx.BORDER_RAISED)
-show5=wx.StaticText(panel,label="CONVERTED TIME WILL APPEAR HERE ↓",pos=(180,355),style=wx.SIMPLE_BORDER)
-output=wx.StaticText(panel,label="",pos=(200,385),size=(200,30),style=wx.SIMPLE_BORDER)
-inputtime.Bind(wx.EVT_TEXT, simple_frame)
+frame = wx.Frame(
+    None,
+    title="Time Zone & Weather Viewer",
+    size=(700, 550),
+    style=wx.MINIMIZE_BOX | wx.SYSTEM_MENU | wx.CAPTION | wx.CLOSE_BOX
+)
+panel = wx.Panel(frame, style=wx.SIMPLE_BORDER)
+
+show1 = wx.StaticText(panel, label="ENTER DATE & TIME", pos=(220, 55))
+inputdt = wx.TextCtrl(panel, pos=(200, 85), size=(250, 25), style=wx.SIMPLE_BORDER)
+inputdt.SetHint("YYYY-MM-DD HH:MM:SS e.g. 2025-12-05 14:30:00")
+
+nowtime = wx.Button(panel, label="CURRENT LOCAL", pos=(270, 120), size=(120, 30), style=wx.BORDER_RAISED)
+
+show4 = wx.StaticText(panel, label="Select Source and Target Timezones", pos=(220, 170))
+fromtz = wx.Choice(panel, choices=timezones, pos=(200, 200), size=(250, 30), style=wx.BORDER_SUNKEN)
+totz = wx.Choice(panel, choices=timezones, pos=(200, 240), size=(250, 30), style=wx.BORDER_SUNKEN)
+
+convert = wx.Button(panel, label="CONVERT TIME", pos=(270, 280), size=(120, 30), style=wx.BORDER_RAISED)
+show5 = wx.StaticText(panel, label="CONVERTED TIME WILL APPEAR HERE ↓", pos=(200, 320), style=wx.SIMPLE_BORDER)
+output = wx.StaticText(panel, label="", pos=(50, 350), size=(600, 30), style=wx.SIMPLE_BORDER)
+
+# Weather UI
+show_weather = wx.StaticText(panel, label="WEATHER (Uses target timezone city)", pos=(220, 390))
+weather_btn = wx.Button(panel, label="GET WEATHER", pos=(270, 420), size=(120, 30), style=wx.BORDER_RAISED)
+weather_output = wx.StaticText(panel, label="", pos=(50, 460), size=(600, 60), style=wx.SIMPLE_BORDER)
+
+# Bindings
+inputdt.Bind(wx.EVT_TEXT, simple_frame)
 fromtz.Bind(wx.EVT_CHOICE, simple_frame)
 totz.Bind(wx.EVT_CHOICE, simple_frame)
 convert.Bind(wx.EVT_BUTTON, on_convert)
 nowtime.Bind(wx.EVT_BUTTON, on_now)
-texts = [show2, show4, show5, output, convert, nowtime]
-variables = [inputtime, fromtz, totz,convert, nowtime]
+weather_btn.Bind(wx.EVT_BUTTON, on_weather)
+
+# Important: include all texts & interactive widgets
+texts = [
+    show1, show4, show5, output,
+    show_weather, weather_output,
+    convert, nowtime, weather_btn
+]
+variables = [
+    inputdt, fromtz, totz,
+    convert, nowtime, weather_btn
+]
+
 frame.Show()
 app.MainLoop()
-
 
 
 # # Simple user input
