@@ -49,7 +49,7 @@ pip install wxPython pytz tzlocal requests
 
 ### Time Conversion & Theming
 - Uses `pytz` to localize naïve datetimes and convert them safely with DST awareness.
-- Background colors shift automatically depending on the converted or input hour (pre-dawn, sunrise, noon, sunset, late night) to provide a quick visual cue.
+- The hero background artwork swaps per time-of-day bucket (and rain flag) while all controls sit on a clean white canvas, so the scene feels dynamic without sacrificing readability.
 - The **Current Local** button (`tzlocal.get_localzone_name`) pre-fills the current timestamp and timezone to reduce typing.
 
 ### Weather Lookup
@@ -88,7 +88,7 @@ pip install wxPython pytz tzlocal requests
 
 - **Adding more aliases**: edit `tz_aliases.txt` with `old_id=new_id` entries. The loader applies them automatically at startup.
 - **Caching policy**: both the weather and currency modules hit public APIs; consider persisting results if you need offline functionality.
-- **UI tweaks**: `Tzpy.py` drives layout in absolute coordinates. Switching to sizers will make resizing easier if you plan to expand the window.
+- **UI tweaks**: `Tzpy.py` drives layout in absolute coordinates that were last tuned for a 1280×720 window with wider inputs, centered summaries, and default-white controls. Switch to sizers if you plan to support dynamic window sizes.
 
 ## Troubleshooting & FAQ
 
