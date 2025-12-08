@@ -1,106 +1,80 @@
 # PythonJackfruit
 
-PythonJackfruit is a wxPython desktop utility that combines three workflows in one place:
-- Convert any timestamp between two IANA timezones with DST-aware accuracy.
-- Fetch the hourly weather that corresponds to the destination timezone and time.
-- Compare historical exchange rates derived from the countries that own the selected timezones.
+> A friendly “three-in-one” desktop buddy I built in college to convert timezones, peek at the weather, and compare currencies without hopping between websites.
 
-The app is opinionated about input quality so that downstream weather and currency calls succeed with minimal retries. This document dives into the runtime architecture, data flow, and operational tips so contributors can extend the tool confidently.
+## Why This Exists
 
-## Architecture Overview
+During group projects we kept dropping links in chat: one for time math, another for weather, and a third for exchange rates. PythonJackfruit glues those steps into a single wxPython window so it feels like a mini productivity dashboard. The app still uses real APIs under the hood, but the UI is opinionated enough that classmates can jump in without worrying about weird formats.
 
-Component | Responsibility | Dependencies
---------- | -------------- | ------------
-`Tzpy.py` | GUI bootstrap, event wiring, timezone conversion, theme switching, feature orchestration | `wxPython`, `pytz`, `tzlocal`, local modules
-`weather_api.py` | Geocode city names (Open-Meteo) and fetch hourly weather data (forecast or archive) | `requests`
-`currency.py` | Map timezones to ISO country codes, resolve main currencies, fetch Frankfurter FX rates | `requests`, `pytz`
-`tz_aliases.txt` | Optional alias sheet that maps legacy tz IDs to canonical names | —
+## Quick Start (Lab Manual Style)
 
-Data flows from the GUI to helper modules in this order:
-1. User input (datetime + timezones) triggers conversion.
-2. The conversion result updates the background theme based on time-of-day buckets.
-3. Weather and currency buttons reuse the same inputs, enrich them with remote API data, and render formatted summaries.
-
-## Requirements
-
-- Python 3.10+
-- `wxPython`, `pytz`, `tzlocal`, `requests`
-
-Install dependencies once:
-
-```powershell
-pip install wxPython pytz tzlocal requests
-```
-
-## Running the App
-
-1. Open PowerShell inside the project folder (`PythonJackfruit`).
-2. Launch the desktop client:
+1. Make sure Python 3.10+ is installed.
+2. Install the dependencies once:
+   ```powershell
+   pip install wxPython pytz tzlocal requests
+   ```
+3. Run the GUI from the project root:
    ```powershell
    python Tzpy.py
    ```
-3. Provide the source datetime using `YYYY-MM-DD HH:MM:SS` (minutes must be `00` for weather).
-4. Choose **From TZ** (source) and **To TZ** (destination) from the dropdown lists.
-5. Click **Convert Time** to view the converted timestamp plus an ambient theme that mirrors the destination brightness.
-6. Click **Get Weather** to fetch temperature, humidity, and precipitation for the derived destination city.
-7. Click **Compare 1 Unit** to derive currencies from the two timezones and show the exchange rate for the provided date.
+4. Type a datetime in `YYYY-MM-DD HH:MM:SS` (minutes must be `00` so the weather API lines up with hourly data).
+5. Pick the source and destination timezones, then click **Convert Time**.
+6. Use **Get Weather** and **Compare 1 Unit** to reuse the same inputs for weather + currency breakdowns.
 
-## Feature Deep Dive
+## Feature Tour
 
-### Time Conversion & Theming
-- Uses `pytz` to localize naïve datetimes and convert them safely with DST awareness.
-- The hero background artwork swaps per time-of-day bucket (and rain flag) while all controls sit on a clean white canvas, so the scene feels dynamic without sacrificing readability.
-- The **Current Local** button (`tzlocal.get_localzone_name`) pre-fills the current timestamp and timezone to reduce typing.
+### Time Conversion + Ambient Theme
+- `pytz` handles the DST math so the converted time is trustworthy.
+- Time buckets (pre-dawn, sunrise, day, evening, night) control the illustration behind the widgets. Rain/snow/storm variants keep the vibe accurate without hiding the controls.
+- **Current Local** grabs the OS timezone via `tzlocal` and pre-fills the datetime so you can convert instantly.
 
-### Weather Lookup
-- Destination timezone is mapped to a best-guess city name (`Asia/Tokyo` → `Tokyo`).
-- The name is geocoded via Open-Meteo’s free geocoding API (single-result search for clarity).
-- The hourly weather endpoint switches between forecast and archive services depending on whether the requested date is in the past.
-- Only round-hour timestamps are supported; the UI enforces this by hint text and the backend validates again.
+### Weather Snapshot
+- The destination timezone is translated into a city string (`Europe/Berlin` ➜ `Berlin`).
+- Open-Meteo’s geocoder turns that string into latitude/longitude. With that info we call their hourly endpoint (forecast or archive, depending on whether the requested date is in the past).
+- Returned data includes `temperature`, `humidity`, `precipitation`, `weathercode`, and `cloudcover`. A helper translates those numbers into labels like “cloudy” or “storm” for the background picker.
 
 ### Currency Comparison
-- Each timezone is mapped to an ISO country code using `pytz.country_timezones` plus alias lookups from `tz_aliases.txt`.
-- Country code → currency code is resolved via RestCountries; successful lookups are cached for the process lifetime.
-- Frankfurter provides the FX rate (historical if a date is given, latest otherwise). The UI fixes the comparison at `1 unit` to keep output compact.
+- Each timezone is mapped to an ISO country code via `pytz` and an optional alias file.
+- The country code feeds into RestCountries to find the primary currency.
+- Frankfurter’s API returns the historical rate for the given date so we can show `1 source = X target` with the exact rate timestamp.
 
-## Module Reference
+## Under the Hood (High-Level Architecture)
 
-- **`Tzpy.py`**
-   - `time_zone_converter`: localizes a naïve datetime to the source timezone, shifts it to the target timezone, and returns a formatted string.
-   - `back_fore_ground`, `time_background_converter_input`, `time_background_converter_output`: drive the ambient theme based on user-entered or converted times.
-   - `on_convert`, `on_now`, `on_weather`, `on_currency_convert`: wxPython event handlers that orchestrate conversions and delegate to helper modules.
-   - UI setup code initializes every widget explicitly, wires events, and enters the wx main loop.
-- **`weather_api.py`**
-   - `city_name_from_timezone`: converts `Continent/City` into a human-readable city string.
-   - `get_location_from_timezone`: uses Open-Meteo geocoding to turn the city string into `(lat, lon, display_name, country_code)`.
-   - `get_weather_for_datetime`: selects archive vs. forecast API, enforces on-the-hour timestamps, and returns a dictionary with temperature, humidity, and precipitation values.
-- **`currency.py`**
-   - `_load_aliases`: loads `tz_aliases.txt`, allowing legacy timezone identifiers to piggyback on canonical zones.
-   - `get_currency_from_country`: hits RestCountries once per ISO code and caches the currency result in-memory.
-   - `get_currency_from_timezone`: maps a timezone (canonical or alias) to the owning country before resolving its currency.
-   - `convert_currency`: queries Frankfurter for historical or latest FX rates and returns both the converted amount and the rate date.
-- **`tz_aliases.txt`**
-   - Plain text mapping in `alias=canonical` format.
-   - Lines beginning with `#` are comments; blank lines are ignored.
-   - Extend this file whenever you need to support legacy timezone strings that are not part of `pytz` anymore.
+Component | What it does | Extra notes
+--------- | ------------- | -----------
+`Tzpy.py` | Launches the wxPython window, wires events, handles user input, owns the theme engine | Depends on `wxPython`, `pytz`, `tzlocal`, plus the two helper modules below
+`weather_api.py` | Geocodes the timezone-derived city, fetches hourly weather data, and labels conditions | Uses `requests` for Open-Meteo geocoding + weather endpoints
+`currency.py` | Maps timezones to countries, derives currencies, and calls Frankfurter for exchange rates | Uses `requests` and `pytz`
+`tz_aliases.txt` | Optional mapping for legacy timezone identifiers so lookups still succeed | Plain text `alias=canonical`
 
-## Extending the App
+Data flow in one glance:
+1. User enters a datetime + timezones.
+2. The GUI converts the time, updates the themed background, and displays the string.
+3. Weather and currency buttons reuse that context to fetch their respective API data and show formatted summaries.
 
-- **Adding more aliases**: edit `tz_aliases.txt` with `old_id=new_id` entries. The loader applies them automatically at startup.
-- **Caching policy**: both the weather and currency modules hit public APIs; consider persisting results if you need offline functionality.
-- **UI tweaks**: `Tzpy.py` drives layout in absolute coordinates that were last tuned for a 1280×720 window with wider inputs, centered summaries, and default-white controls. Switch to sizers if you plan to support dynamic window sizes.
+## Files at a Glance
 
-## Troubleshooting & FAQ
+- **`Tzpy.py`** – Main script. Notable functions:
+  - `time_zone_converter` handles the conversion math.
+  - `back_fore_ground` and `set_time_bucket_from_time` pick the artwork.
+  - `on_convert`, `on_now`, `on_weather`, `on_currency_convert` are the event callbacks.
+  - The bottom half declares and positions every widget (absolute layout sized for a 1280×720 window).
+- **`weather_api.py`** – Turns a timezone into coordinates, then into weather data. Adds a `condition` string for the background switcher.
+- **`currency.py`** – Figures out which currency belongs to each timezone and calls Frankfurter for a `1-unit` comparison.
+- **`tz_aliases.txt`** – Handy spot for mapping `US/Eastern`-style legacy IDs to their canonical forms if someone types an older name.
 
-- `ModuleNotFoundError`: verify that requirements are installed in the interpreter that runs `Tzpy.py`.
-- Weather requests fail with "No weather exactly at that hour": make sure the input minutes and seconds are `00`. Open-Meteo only returns hourly slices.
-- Currency error mentioning aliases: ensure both dropdowns point to canonical city-based timezones. Plain offsets like `UTC` lack country context.
-- GUI freezes or closes immediately: check PowerShell output for stack traces (API timeouts will print there). Slow networks may require reattempting.
+## Tips + Troubleshooting
 
-## Roadmap Ideas
+- `ModuleNotFoundError`: double-check that you installed the dependencies in the same interpreter you use for `python Tzpy.py`.
+- Weather errors about “exact hour”: the API expects minute/second to be `00`. The textbox hint reminds you, but validation happens again server-side.
+- Currency alias errors: ensure both dropdowns are actual location-based zones (`America/New_York`, not `UTC`). Plain offsets do not map to countries.
+- GUI window blank? Watch the PowerShell output—any network errors while loading background art or API data show up there first.
 
-- Persist the last-used selections to disk so sessions can resume quickly.
-- Add multi-currency conversion or amount inputs for the FX feature.
-- Support additional weather providers with richer condition metadata or icons.
+## Ideas for Future Iterations
 
-Feel free to open issues or pull requests with enhancements, bug reports, or documentation fixes.
+1. Persist the last selections to a JSON file so the app remembers your previous session.
+2. Add amount inputs for the FX card (currently fixed at `1 unit`).
+3. Swap the absolute layout for wxPython sizers to support window resizing.
+4. Drop in richer condition art (fog, snow, thunder) once the current theme palette is finalized.
+
+Feel free to fork, remix, or file issues if you spot bugs. I’m always down to hear what would make this little dashboard more helpful in a real-world student workflow.

@@ -1,6 +1,41 @@
+"""Helper module that owns every network call for weather + basic condition tagging."""
+
 import requests  # Open-Meteo and geocoding HTTP client.
 from datetime import datetime, date  # Parsing helpers and "today" reference.
 
+
+def classify_condition(weathercode, precip, cloudcover):
+    """Collapse Open-Meteo numeric fields into readable tags the GUI can reason about."""
+
+    # --- Storm / Thunderstorm ---
+    # Open-Meteo: 95 = thunderstorm, 96–99 = thunderstorm with hail
+    if weathercode in (95, 96, 97, 98, 99):
+        return "storm"
+
+    # --- Snow ---
+    # 71–78 = all snow types, 85–86 = heavy snow showers
+    if weathercode in (71, 73, 75, 77, 85, 86):
+        return "snow"
+
+    # --- Rain ---
+    # Any precipitation > 0 or weather codes indicating rain/drizzle/showers
+    if precip > 0.1 or weathercode in (
+        51, 53, 55,  # drizzle
+        56, 57,      # freezing drizzle
+        61, 63, 65,  # rain
+        66, 67,      # freezing rain
+        80, 81, 82   # rain showers
+    ):
+        return "rain"
+
+    # --- Cloudy ---
+    # 1 = mainly clear, 2 = partly cloudy, 3 = overcast
+    # 45, 48 = fog
+    if weathercode in (1, 2, 3, 45, 48) or cloudcover >= 60:
+        return "cloudy"
+
+    # --- Default ---
+    return "clear"
 
 def city_name_from_timezone(tz_name): # Helper for extracting the city portion.
     """Return the city component of a Continent/City timezone."""
@@ -41,12 +76,14 @@ def get_location_from_timezone(tz_name):  # Resolve geocoding metadata for a tim
     )
 
 
-def get_weather_for_datetime(dt_str: str, tz_name: str):  # Main entry for hourly weather lookups.
-    """Fetch hourly weather for `dt_str` in `tz_name`, picking archive vs forecast automatically."""
+def get_weather_for_datetime(dt_str: str, tz_name: str):
+    """Fetch the hourly weather slice that matches the provided datetime + timezone."""
 
-    dt_requested = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S").replace(minute=0, second=0)  # Align to whole hour.
+    # Parse once and clamp minutes/seconds because Open-Meteo only exposes full hours.
+    dt_requested = datetime.strptime(dt_str, "%Y-%m-%d %H:%M:%S").replace(minute=0, second=0)
 
-    lat, lon, city_name, country_code = get_location_from_timezone(tz_name)  # Coordinates + metadata for API calls.
+    # Timezone → best-guess city → geocoded coordinates.
+    lat, lon, city_name, country_code = get_location_from_timezone(tz_name)
 
     date_str = dt_requested.strftime("%Y-%m-%d")  # Common date string for both APIs.
 
@@ -57,12 +94,12 @@ def get_weather_for_datetime(dt_str: str, tz_name: str):  # Main entry for hourl
     )  # Choose the endpoint based on whether the datetime is past or present/future.
 
     params = {
-        "latitude": lat,  # Include latitude in query.
-        "longitude": lon,  # Include longitude in query.
-        "hourly": "temperature_2m,relative_humidity_2m,precipitation",  # Only fetch the fields we display.
-        "timezone": tz_name,  # Request timezone-adjusted timestamps.
-        "start_date": date_str,  # Limit to the requested date.
-        "end_date": date_str,  # Same date for both bounds.
+        "latitude": lat,
+        "longitude": lon,
+        "hourly": "temperature_2m,relative_humidity_2m,precipitation,weathercode,cloudcover",
+        "timezone": tz_name,
+        "start_date": date_str,
+        "end_date": date_str,
     }
 
     try:  # Execute the weather call and ensure success.
@@ -73,11 +110,15 @@ def get_weather_for_datetime(dt_str: str, tz_name: str):  # Main entry for hourl
 
     data = resp.json()  # Parse the returned JSON content.
 
-    hourly = data.get("hourly", {})  # Parallel arrays keyed by measurement type.
-    times = hourly.get("time", [])  # ISO stamps for each hour.
-    temps = hourly.get("temperature_2m", [])  # Temperature list aligned with times.
-    hums = hourly.get("relative_humidity_2m", [])  # Humidity list aligned with times.
-    precs = hourly.get("precipitation", [])  # Precip list aligned with times.
+    hourly = data.get("hourly", {})
+    times  = hourly.get("time", [])
+    temps  = hourly.get("temperature_2m", [])
+    hums   = hourly.get("relative_humidity_2m", [])
+    precs  = hourly.get("precipitation", [])
+    codes  = hourly.get("weathercode", [])
+    clouds = hourly.get("cloudcover", [])
+
+
 
     if not times:  # No hourly results were returned.
         raise ValueError("No hourly weather data returned for that date (out of range?).")  # Notify caller.
@@ -91,14 +132,22 @@ def get_weather_for_datetime(dt_str: str, tz_name: str):  # Main entry for hourl
 
     if index is None:  # API did not include the exact hour requested.
         raise ValueError("No weather exactly at that hour (set minutes to 00).")  # Suggest corrective action.
+    condition = classify_condition(
+        weathercode=codes[index],
+        precip=precs[index],
+        cloudcover=clouds[index],
+    )
 
     return {
-        "city": city_name,  # Display city name.
-        "country": country_code,  # Country code for context.
-        "time": times[index],  # Timestamp at the matched hour.
-        "temperature": temps[index],  # Temperature value.
-        "humidity": hums[index],  # Humidity percentage.
-        "precipitation": precs[index],  # Precipitation amount.
-        "latitude": lat,  # Latitude echoed back for completeness.
-        "longitude": lon,  # Longitude echoed back for completeness.
+        "city": city_name,
+        "country": country_code,
+        "time": times[index],
+        "temperature": temps[index],
+        "humidity": hums[index],
+        "precipitation": precs[index],
+        "weathercode": codes[index],
+        "cloudcover": clouds[index],
+        "condition": condition,   # ← NEW: clear / cloudy / rain / snow / storm
+        "latitude": lat,
+        "longitude": lon,
     }

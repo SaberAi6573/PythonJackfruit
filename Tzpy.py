@@ -1,3 +1,5 @@
+"""Desktop helper that fuses timezone conversion, weather lookup, and FX checks."""
+
 from datetime import datetime, time  # Core datetime parsing and comparisons.
 import pytz  # Timezone database and conversion helpers.
 import wx  # wxPython GUI toolkit.
@@ -9,34 +11,61 @@ result = ""  # Last converted timestamp shown in the UI.
 text_widgets = []  # Reserved hooks for static text theme updates.
 input_widgets = []  # Reserved hooks for input/theme updates.
 button_widgets = []  # Reserved hooks for button-specific theming.
-last_text_mode = "light"
+last_text_mode = "light"  # Tracks which text palette is currently applied.
+bg_bitmap = None  # wx.StaticBitmap instance that actually paints the scene.
+
 # --- Background Image System ---
-bg_bitmap = None
+current_time_bucket = "night"          # pre_dawn, sunrise, morning, day, evening, night
+current_weather_condition = "clear"    # clear, cloudy, rain, snow, storm
 
-# Time-of-day bucket + rain flag
-current_time_bucket = "night"
-current_weather_is_rainy = False
-
-# Mapping (time_bucket, rainy?) -> image path
+# Central catalogue mapping (time_bucket, condition) → image file.
+# Having every option in one dictionary keeps the back_fore_ground logic simple:
+# it only needs to build a tuple key and hand it to this mapping.
 BACKGROUND_IMAGES = {
-    ("pre_dawn", False): "images/night_clear_1.png",
-    ("pre_dawn", True):  "images/night_rain_1.png",
+    # PRE-DAWN / NIGHT BEFORE SUNRISE
+    ("pre_dawn", "clear"):  "images/night_clear.png",
+    ("pre_dawn", "cloudy"): "images/night_cloudy.png",
+    ("pre_dawn", "rain"):   "images/night_rain.png",
+    ("pre_dawn", "snow"):   "images/night_snow.png",
+    ("pre_dawn", "storm"):  "images/night_storm.png",
 
-    ("sunrise", False):  "images/morning_clear_1.png",
-    ("sunrise", True):   "images/morning_rain_1.png",
+    # SUNRISE
+    ("sunrise", "clear"):   "images/morning_clear.png",
+    ("sunrise", "cloudy"):  "images/morning_cloudy.png",
+    ("sunrise", "rain"):    "images/morning_rain.png",
+    ("sunrise", "snow"):    "images/morning_snow.png",
+    ("sunrise", "storm"):   "images/morning_storm.png",
 
-    ("morning", False):  "images/morning_clear_1.png",
-    ("morning", True):   "images/morning_rain_1.png",
+    # MORNING – AFTER SUNRISE
+    ("morning", "clear"):   "images/morning_clear.png",
+    ("morning", "cloudy"):  "images/morning_cloudy.png",
+    ("morning", "rain"):    "images/morning_rain.png",
+    ("morning", "snow"):    "images/morning_snow.png",
+    ("morning", "storm"):   "images/morning_storm.png",
 
-    ("day", False):      "images/day_clear_1.png",
-    ("day", True):       "images/day_rain_1.png",
+    # DAYTIME
+    ("day", "clear"):       "images/day_clear.png",
+    ("day", "cloudy"):      "images/day_cloudy.png",
+    ("day", "rain"):        "images/day_rain.png",
+    ("day", "snow"):        "images/day_snow.png",
+    ("day", "storm"):       "images/day_storm.png",
 
-    ("evening", False):  "images/evening_clear_1.png",
-    ("evening", True):   "images/evening_rain_1.png",
+    # EVENING / SUNSET
+    ("evening", "clear"):   "images/evening_clear.png",
+    ("evening", "cloudy"):  "images/evening_cloudy.png",
+    ("evening", "rain"):    "images/evening_rain.png",
+    ("evening", "snow"):    "images/evening_snow.png",
+    ("evening", "storm"):   "images/evening_storm.png",
 
-    ("night", False):    "images/night_clear_1.png",
-    ("night", True):     "images/night_rain_1.png",
+    # NIGHT TIME
+    ("night", "clear"):     "images/night_clear.png",
+    ("night", "cloudy"):    "images/night_cloudy.png",
+    ("night", "rain"):      "images/night_rain.png",
+    ("night", "snow"):      "images/night_snow.png",
+    ("night", "storm"):     "images/night_storm.png",
 }
+
+
 
 # Anime-inspired font styling
 BASE_FONT_NAME = "Segoe Print"  # Soft handwritten font available on Windows.
@@ -70,32 +99,38 @@ def time_zone_converter(time_str, from_tz, to_tz, time_format="%Y-%m-%d %H:%M:%S
     return converted_time.strftime(time_format)  # Return a string using the original format for UI display.
 
 def back_fore_ground(text_mode):
-    """Apply background image and UI text colors."""
-    global bg_bitmap, current_time_bucket, current_weather_is_rainy, last_text_mode
-    last_text_mode = text_mode
-    key = (current_time_bucket, current_weather_is_rainy)
+    """Select artwork + text palette, then repaint the backdrop."""
+
+    global bg_bitmap, current_time_bucket, current_weather_condition, last_text_mode
+    last_text_mode = text_mode  # Store mode so window resizes can reuse it.
+
+    # Step 1: look up which asset matches the active time bucket + weather tag.
+    key = (current_time_bucket, current_weather_condition)
     img_path = BACKGROUND_IMAGES.get(key)
 
+    # Step 2: fall back to the clear-sky variant for that bucket if the combo is missing.
+    if img_path is None:
+        img_path = BACKGROUND_IMAGES.get((current_time_bucket, "clear"))
+
+    # Step 3: load + scale the bitmap so it always spans the full window.
     if img_path and bg_bitmap is not None:
         try:
-            # Get current panel size
-            w, h = panel.GetClientSize()
+            w, h = panel.GetClientSize()  # Ask wx for the current drawable size.
 
             img = wx.Image(img_path, wx.BITMAP_TYPE_ANY)
-            # Avoid 0-size crashes on initial load
-            if w > 0 and h > 0:
+            if w > 0 and h > 0:  # wx can report (0, 0) during startup.
                 img = img.Scale(w, h, wx.IMAGE_QUALITY_HIGH)
 
             bmp = wx.Bitmap(img)
             bg_bitmap.SetBitmap(bmp)
             bg_bitmap.SetSize((w, h))
             bg_bitmap.SetPosition((0, 0))
-            bg_bitmap.Lower()
+            bg_bitmap.Lower()  # Keep the bitmap behind all interactive widgets.
             panel.Refresh()
         except Exception as e:
             print("Error loading image:", img_path, e)
 
-    # Keep the main panel white regardless of the active mode for a clean base layer.
+    # Step 4: paint the panel white so controls stay legible even with dark art.
     if "panel" in globals():
         try:
             panel.SetBackgroundColour(wx.Colour(255, 255, 255))
@@ -108,22 +143,22 @@ def set_time_bucket_from_time(t_obj):
     global current_time_bucket
 
     if time(0, 0, 0) <= t_obj < time(4, 0, 0):
-        current_time_bucket = "pre_dawn"
+        current_time_bucket = "pre_dawn"  # After midnight but before sunrise glow.
         mode = "light"
     elif time(4, 0, 0) <= t_obj < time(6, 0, 0):
-        current_time_bucket = "sunrise"
+        current_time_bucket = "sunrise"  # Warm tones, sun just peeking out.
         mode = "light"
     elif time(6, 0, 0) <= t_obj < time(10, 0, 0):
-        current_time_bucket = "morning"
+        current_time_bucket = "morning"  # Cooler daylight palette.
         mode = "dark"
     elif time(10, 0, 0) <= t_obj < time(17, 0, 0):
-        current_time_bucket = "day"
+        current_time_bucket = "day"  # Bright ambient midday art.
         mode = "dark"
     elif time(17, 0, 0) <= t_obj < time(20, 0, 0):
-        current_time_bucket = "evening"
+        current_time_bucket = "evening"  # Sunset / twilight gradients.
         mode = "dark"
     else:
-        current_time_bucket = "night"
+        current_time_bucket = "night"  # Deep night sky.
         mode = "light"
 
     back_fore_ground(mode)
@@ -161,11 +196,12 @@ def on_now(event):
 def simple_frame():
     """Sync globals with the latest widget values."""
     global time_str, from_tz, to_tz
-    time_str = inputdt.GetValue()  # Cache the raw datetime string from the text control.
-    time_background_converter_input()  # Nudge the background preview each time the field changes.
-    from_tz = fromtz.GetStringSelection()  # Remember the currently chosen source timezone.
-    to_tz = totz.GetStringSelection()  # Remember the currently chosen destination timezone.
-    
+    # Grab whatever the user most recently typed so conversions run against the freshest values.
+    time_str = inputdt.GetValue()
+    time_background_converter_input()  # Update the background preview live while typing.
+    from_tz = fromtz.GetStringSelection()
+    to_tz = totz.GetStringSelection()
+        
 def on_weather(event):
     """Validate inputs, fetch hourly weather for the target zone, and render a compact summary."""
     dt_str_local = inputdt.GetValue().strip()  # Datetime string typed in the text box.
@@ -186,9 +222,10 @@ def on_weather(event):
 
     try:
         weather = wa.get_weather_for_datetime(dt_str_local, tz_name)  # Delegate to Open-Meteo helper.
-        # Update raining status
-        global current_weather_is_rainy
-        current_weather_is_rainy = weather["precipitation"] > 0
+
+        # Save the parsed condition tag so the background can mirror rain/snow/storm visuals.
+        global current_weather_condition
+        current_weather_condition = weather.get("condition", "clear")
 
         # Reapply background with rain condition
         try:
@@ -204,7 +241,8 @@ def on_weather(event):
             f"🌤 {weather['city']}, {weather['country']} @ {display_time}\n"
             f"🌡 Temp: {weather['temperature']}°C   "
             f"💧 Humidity: {weather['humidity']}%   "
-            f"🌧 Precip: {weather['precipitation']} mm"
+            f"🌧 Precip: {weather['precipitation']} mm\n"
+            f"🌈 Condition: {weather['condition'].capitalize()}"
         )
         weather_output.SetLabel(msg)
     except Exception as e:
@@ -240,7 +278,8 @@ def on_currency_convert(event):
 
     try:
         amount = 1.0  # Fixed comparison amount shown in the UI.
-        converted, date_used = cu.convert_currency(amount, from_cur, to_cur, date_for_rate)  # Call Frankfurter helper.
+        # Frankfurter returns both the converted value and the actual rate date (weekends etc.).
+        converted, date_used = cu.convert_currency(amount, from_cur, to_cur, date_for_rate)
         msg = (
             f"💱 Based on timezones & date:\n"
             f"{from_tz_raw} -> {from_cur}   |   {to_tz_raw} -> {to_cur}\n"
@@ -268,6 +307,7 @@ def on_resize(event):
 
 # ---------------- UI SETUP (wxPython) ---------------- #
 
+# Layout constants keep the absolute positioning tidy.
 LEFT_MARGIN = 80
 CONTROL_WIDTH = 420
 CONTROL_HEIGHT = 32
@@ -276,7 +316,8 @@ BUTTON_WIDTH = 200
 BUTTON_HEIGHT = 38
 DISPLAY_WIDTH = 920
 
-timezones = pytz.all_timezones  # Populate dropdowns with every IANA zone.
+# Preload all IANA zones so both dropdowns have identical lists.
+timezones = pytz.all_timezones
 app = wx.App(False)
 frame = wx.Frame(
     None,
