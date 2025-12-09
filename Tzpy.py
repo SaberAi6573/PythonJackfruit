@@ -1,11 +1,10 @@
-"""Desktop helper that fuses timezone conversion, weather lookup, and FX checks."""
+"""Desktop helper that fuses timezone conversion with weather lookups."""
 
 from datetime import datetime, time  # Core datetime parsing and comparisons.
 import pytz  # Timezone database and conversion helpers.
 import wx  # wxPython GUI toolkit.
 from tzlocal import get_localzone_name  # OS timezone helper for the "Current Local" button.
 import weather_api as wa  # Project weather helpers.
-import currency as cu  # Project currency helpers.
 
 result = ""  # Last converted timestamp shown in the UI.
 text_widgets = []  # Reserved hooks for static text theme updates.
@@ -248,47 +247,6 @@ def on_weather(event):
     except Exception as e:
         weather_output.SetLabel(f"Weather error: {e}")
         
-def on_currency_convert(event):
-    """Translate both timezones to currencies and show a 1-unit historical conversion."""
-    from_tz_raw = fromtz.GetStringSelection()  # Source timezone selected by the user.
-    to_tz_raw = totz.GetStringSelection()  # Destination timezone selected by the user.
-
-    if not from_tz_raw or not to_tz_raw:
-        currency_output.SetLabel("Error: Select both source and target timezones first.")
-        return
-
-    dt_str_local = inputdt.GetValue().strip()  # Reuse the same datetime to choose the FX date.
-    if not dt_str_local:
-        currency_output.SetLabel("Error: Enter datetime (YYYY-MM-DD HH:MM:SS) for rate date.")
-        return
-
-    try:
-        dt_obj = datetime.strptime(dt_str_local, "%Y-%m-%d %H:%M:%S")  # Parse once so we can extract the date.
-        date_for_rate = dt_obj.date().isoformat()  # YYYY-MM-DD string consumed by the FX API.
-    except ValueError:
-        currency_output.SetLabel("Error: Invalid datetime format.")
-        return
-
-    try:
-        from_cur = cu.get_currency_from_timezone(from_tz_raw)  # Map timezone -> country -> currency.
-        to_cur = cu.get_currency_from_timezone(to_tz_raw)
-    except Exception as e:
-        currency_output.SetLabel(f"Currency mapping error: {e}")
-        return
-
-    try:
-        amount = 1.0  # Fixed comparison amount shown in the UI.
-        # Frankfurter returns both the converted value and the actual rate date (weekends etc.).
-        converted, date_used = cu.convert_currency(amount, from_cur, to_cur, date_for_rate)
-        msg = (
-            f"💱 Based on timezones & date:\n"
-            f"{from_tz_raw} -> {from_cur}   |   {to_tz_raw} -> {to_cur}\n"
-            f"Date: {date_for_rate}\n\n"
-            f"1 {from_cur} = {converted:.6f} {to_cur}  (rate date from API: {date_used})"
-        )
-        currency_output.SetLabel(msg)
-    except Exception as e:
-        currency_output.SetLabel(f"Currency error: {e}")
 def on_convert(event):
     """Run the main conversion and refresh the display."""
     simple_frame()
@@ -321,7 +279,7 @@ timezones = pytz.all_timezones
 app = wx.App(False)
 frame = wx.Frame(
     None,
-    title="Time, Weather & Currency Tool",
+    title="Time & Weather Tool",
     size=(1280, 720),
     style=wx.DEFAULT_FRAME_STYLE
           & ~( wx.MAXIMIZE_BOX | wx.RESIZE_BORDER)
@@ -370,16 +328,6 @@ weather_btn = wx.Button(
 )
 weather_output = wx.StaticText(panel, label="", pos=(LEFT_MARGIN, 395), size=(DISPLAY_WIDTH, 90), style=wx.SIMPLE_BORDER)
 
-# Currency UI (automatic from timezones + historical)
-show_currency = wx.StaticText(panel, label="CURRENCY", pos=(LEFT_MARGIN, 510))
-currency_btn = wx.Button(
-    panel,
-    label="COMPARE 1 UNIT",
-    pos=(RIGHT_BUTTON_X, 500),
-    size=(BUTTON_WIDTH, BUTTON_HEIGHT),
-    style=wx.BORDER_RAISED,
-)
-currency_output = wx.StaticText(panel, label="", pos=(LEFT_MARGIN, 545), size=(DISPLAY_WIDTH, 110), style=wx.SIMPLE_BORDER)
 
 # Bindings
 inputdt.Bind(wx.EVT_TEXT, simple_frame)
@@ -388,7 +336,6 @@ totz.Bind(wx.EVT_CHOICE, simple_frame)
 convert.Bind(wx.EVT_BUTTON, on_convert)
 nowtime.Bind(wx.EVT_BUTTON, on_now)
 weather_btn.Bind(wx.EVT_BUTTON, on_weather)
-currency_btn.Bind(wx.EVT_BUTTON, on_currency_convert)
 
 # Widgets participating in theme swaps
 text_widgets = [  # Static labels and outputs that follow theme colours.
@@ -398,8 +345,6 @@ text_widgets = [  # Static labels and outputs that follow theme colours.
     output,
     show_weather,
     weather_output,
-    show_currency,
-    currency_output,
 ]
 input_widgets = [  # Controls that accept user input.
     inputdt,
@@ -410,7 +355,6 @@ button_widgets = [  # Action buttons that need consistent theming.
     convert,
     nowtime,
     weather_btn,
-    currency_btn,
 ]
 
 for widget in text_widgets:
@@ -424,7 +368,6 @@ for widget in button_widgets:
 
 apply_anime_font(output, size=13, weight=wx.FONTWEIGHT_MEDIUM)  # Highlight the main conversion result.
 apply_anime_font(weather_output, size=12)  # Weather summary uses slightly larger text.
-apply_anime_font(currency_output, size=12)  # Currency summary matches weather text size.
 
 
 frame.Show()  # Display the fully configured window.
