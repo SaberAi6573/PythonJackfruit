@@ -6,21 +6,20 @@ import wx  # wxPython GUI toolkit.
 from tzlocal import get_localzone_name  # OS timezone helper for the "Current Local" button.
 import weather_api as wa  # Project weather helpers.
 
-
-result = ""  # Last converted timestamp shown in the UI.
-text_widgets = []  # Reserved hooks for static text theme updates.
-input_widgets = []  # Reserved hooks for input/theme updates.
-button_widgets = []  # Reserved hooks for button-specific theming.
-last_text_mode = "light"  # Tracks which text palette is currently applied.
-bg_bitmap = None  # wx.StaticBitmap instance that actually paints the scene.
+# --- Global UI State ------------------------------------------------------
+result = ""  # Most recent converted timestamp shown in the UI.
+text_widgets = []  # Static labels whose colours update with the theme.
+input_widgets = []  # Inputs that share hint text, fonts, and palette updates.
+button_widgets = []  # Buttons grouped for consistent styling.
+last_text_mode = "light"  # Remembers which palette was last applied.
+bg_bitmap = None  # wx.StaticBitmap instance responsible for the artwork layer.
 
 # --- Background Image System ---
 current_time_bucket = "night"          # pre_dawn, sunrise, morning, day, evening, night
 current_weather_condition = "clear"    # clear, cloudy, rain, snow, storm
 
-# Central catalogue mapping (time_bucket, condition) → image file.
-# Having every option in one dictionary keeps the back_fore_ground logic simple:
-# it only needs to build a tuple key and hand it to this mapping.
+# Catalog mapping (time_bucket, condition) to the art asset used for the backdrop.
+# Keeping it as one dictionary lets back_fore_ground perform a single lookup per refresh.
 BACKGROUND_IMAGES = {
     # PRE-DAWN / NIGHT BEFORE SUNRISE
     ("pre_dawn", "clear"):  "images/pre_dawn_clear.png",
@@ -63,10 +62,7 @@ BACKGROUND_IMAGES = {
     ("night", "storm"):     "images/night_storm.png",
 }
 
-
-
-
-# Anime-inspired font styling
+# Font helper keeps headings consistent without repeating the wx.Font setup.
 BASE_FONT_NAME = "Segoe Print"  # Soft handwritten font available on Windows.
 
 
@@ -195,7 +191,7 @@ def on_now(event):
 def simple_frame():
     """Sync globals with the latest widget values."""
     global time_str, from_tz, to_tz
-    # Grab whatever the user most recently typed so conversions run against the freshest values.
+    # Read the latest control values so conversions always use current input.
     time_str = inputdt.GetValue()
     time_background_converter_input()  # Update the background preview live while typing.
     from_tz = fromtz.GetStringSelection()
@@ -226,7 +222,7 @@ def on_weather(event):
         global current_weather_condition
         current_weather_condition = weather.get("condition", "clear")
 
-        # Reapply background with rain condition
+        # Reapply background so visuals match the reported condition.
         try:
             if result:
                 t_obj = datetime.strptime(result, "%Y-%m-%d %H:%M:%S").time()
@@ -265,14 +261,12 @@ def on_resize(event):
 
 # ---------------- UI SETUP (wxPython) ---------------- #
 
-# Layout constants tuned for a centered 16:9 (1440x810) canvas.
-# FRAME_WIDTH/HEIGHT: absolute frame size so background art scales predictably.
-# LEFT_MARGIN: horizontal offset that keeps the control column visually centered.
-# CONTROL_WIDTH/HEIGHT: baseline geometry for the text inputs + choices so they align.
-# COLUMN_GAP: spacing between the left column and the right-side action buttons.
-# RIGHT_BUTTON_X: computed anchor for buttons so they line up with inputs automatically.
-# BUTTON_WIDTH/HEIGHT: reusable dimensions for all push buttons to keep a consistent hit area.
-# DISPLAY_WIDTH: width allotted to multi-line labels such as the conversion + weather output.
+# Layout constants for the fixed 1440x810 frame:
+# - FRAME_WIDTH/HEIGHT keep the background art scaling predictable.
+# - LEFT_MARGIN, CONTROL_WIDTH/HEIGHT, and COLUMN_GAP place the input column.
+# - RIGHT_BUTTON_X is derived so action buttons line up with the inputs.
+# - BUTTON_WIDTH/HEIGHT give every button the same hit area.
+# - DISPLAY_WIDTH controls how wide the multiline output labels can grow.
 FRAME_WIDTH = 1440
 FRAME_HEIGHT = 810
 LEFT_MARGIN = 120

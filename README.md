@@ -1,69 +1,48 @@
 # PythonJackfruit
 
-> A friendly "two-in-one" desktop buddy I built in college to convert timezones and peek at the weather without hopping between websites.
+> Final project submission prepared for my Computer Science teacher. The goal was to practice GUI work while combining API data sources in one workflow.
 
-## Why This Exists
+## Project Overview
 
-During group projects we kept dropping links in chat: one for time math and another for weather. PythonJackfruit glues those steps into a single wxPython window so it feels like a mini productivity dashboard. The app still uses real APIs under the hood, but the UI is opinionated enough that classmates can jump in without worrying about weird formats.
+PythonJackfruit is a desktop helper that lets the user convert a datetime between two time zones and immediately request weather information for the target zone. The interface is built with wxPython, and background artwork shifts automatically to match the time bucket (night, sunrise, day, etc.) and reported weather condition. This keeps the UI visual but still focused on the data the assignment asked for.
 
-## Quick Start (Lab Manual Style)
+## Learning Targets
 
-1. Make sure Python 3.10+ is installed.
-2. Install the dependencies once:
+- Reinforce Python module design by separating the GUI (`Tzpy.py`) from the API helper (`weather_api.py`).
+- Practice calling public web APIs (Open-Meteo) and handling validation/edge cases.
+- Apply coordinate geometry from class (absolute positioning) to place controls on a 16:9 frame.
+
+## Feature Summary
+
+1. Time zone conversion backed by `pytz`, including daylight-saving adjustments.
+2. "Current Local" shortcut pulls the machine’s zone using `tzlocal` to reduce typing mistakes.
+3. Weather lookup reuses the converted context so the user does not re-enter data.
+4. Dynamic background system selects artwork based on both time bucket and reported condition.
+
+## How to Run the Program
+
+1. Install Python 3.10 or newer.
+2. Install the required packages:
    ```powershell
    pip install wxPython pytz tzlocal requests
    ```
-3. Run the GUI from the project root:
+3. Run the GUI from the repository root:
    ```powershell
    python Tzpy.py
    ```
-4. Type a datetime in `YYYY-MM-DD HH:MM:SS` (minutes must be `00` so the weather API lines up with hourly data).
-5. Pick the source and destination timezones, then click **Convert Time**.
-6. Use **Get Weather** to reuse the same inputs for a quick weather breakdown.
+4. Enter a datetime in the format `YYYY-MM-DD HH:MM:SS`. Minutes and seconds should be `00` so they line up with the hourly weather data.
+5. Choose the source and destination time zones, then press **Convert Time**.
+6. Press **Get Weather** to fetch the hourly weather summary for the destination.
 
-## Feature Tour
+## Testing and Verification
 
-### Time Conversion + Ambient Theme
-- `pytz` handles the DST math so the converted time is trustworthy.
-- Time buckets (pre-dawn, sunrise, day, evening, night) control the illustration behind the widgets. Rain/snow/storm variants keep the vibe accurate without hiding the controls.
-- **Current Local** grabs the OS timezone via `tzlocal` and pre-fills the datetime so you can convert instantly.
+- Manual tests covered conversions between local time, UTC, and a distant zone (e.g., Asia/Tokyo) to check DST handling.
+- Weather queries were issued for both future and past timestamps to confirm the helper switches between forecast and archive endpoints correctly.
+- Background images were checked by forcing each time bucket through the input field.
 
-### Weather Snapshot
-- The destination timezone is translated into a city string (`Europe/Berlin` ➜ `Berlin`).
-- Open-Meteo’s geocoder turns that string into latitude/longitude. With that info we call their hourly endpoint (forecast or archive, depending on whether the requested date is in the past).
-- Returned data includes `temperature`, `humidity`, `precipitation`, `weathercode`, and `cloudcover`. A helper translates those numbers into labels like “cloudy” or “storm” for the background picker.
+## Reflection and Next Steps
 
-## Under the Hood (High-Level Architecture)
+- **What worked:** Keeping the GUI logic in one file and the API logic in another made debugging easier. Using absolute coordinates simplified the layout phase for this assignment.
+- **What I would improve next:** add input persistence so the program remembers the last-used time zones, and replace the absolute layout with wxPython sizers for better resizing support.
 
-Component | What it does | Extra notes
---------- | ------------- | -----------
-`Tzpy.py` | Launches the wxPython window, wires events, handles user input, owns the theme engine | Depends on `wxPython`, `pytz`, `tzlocal`, and `weather_api`
-`weather_api.py` | Geocodes the timezone-derived city, fetches hourly weather data, and labels conditions | Uses `requests` for Open-Meteo geocoding + weather endpoints
-
-Data flow in one glance:
-1. User enters a datetime + timezones.
-2. The GUI converts the time, updates the themed background, and displays the string.
-3. The weather button reuses that context to fetch Open-Meteo data and show a formatted summary.
-
-## Files at a Glance
-
-- **`Tzpy.py`** – Main script. Notable functions:
-  - `time_zone_converter` handles the conversion math.
-  - `back_fore_ground` and `set_time_bucket_from_time` pick the artwork.
-   - `on_convert`, `on_now`, and `on_weather` are the event callbacks.
-  - The bottom half declares and positions every widget (absolute layout sized for a 1280×720 window).
-- **`weather_api.py`** – Turns a timezone into coordinates, then into weather data. Adds a `condition` string for the background switcher.
-
-## Tips + Troubleshooting
-
-- `ModuleNotFoundError`: double-check that you installed the dependencies in the same interpreter you use for `python Tzpy.py`.
-- Weather errors about “exact hour”: the API expects minute/second to be `00`. The textbox hint reminds you, but validation happens again server-side.
-- GUI window blank? Watch the PowerShell output—any network errors while loading background art or API data show up there first.
-
-## Ideas for Future Iterations
-
-1. Persist the last selections to a JSON file so the app remembers your previous session.
-2. Swap the absolute layout for wxPython sizers to support window resizing.
-3. Drop in richer condition art (fog, snow, thunder) once the current theme palette is finalized.
-
-Feel free to fork, remix, or file issues if you spot bugs. I’m always down to hear what would make this little dashboard more helpful in a real-world student workflow.
+Thank you for reviewing this project. I am happy to walk through the code or demonstrate the workflow in class if needed.
