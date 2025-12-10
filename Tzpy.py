@@ -6,6 +6,7 @@ import wx  # wxPython GUI toolkit.
 from tzlocal import get_localzone_name  # OS timezone helper for the "Current Local" button.
 import weather_api as wa  # Project weather helpers.
 
+
 result = ""  # Last converted timestamp shown in the UI.
 text_widgets = []  # Reserved hooks for static text theme updates.
 input_widgets = []  # Reserved hooks for input/theme updates.
@@ -22,12 +23,11 @@ current_weather_condition = "clear"    # clear, cloudy, rain, snow, storm
 # it only needs to build a tuple key and hand it to this mapping.
 BACKGROUND_IMAGES = {
     # PRE-DAWN / NIGHT BEFORE SUNRISE
-    ("pre_dawn", "clear"):  "images/night_clear.png",
-    ("pre_dawn", "cloudy"): "images/night_cloudy.png",
-    ("pre_dawn", "rain"):   "images/night_rain.png",
-    ("pre_dawn", "snow"):   "images/night_snow.png",
-    ("pre_dawn", "storm"):  "images/night_storm.png",
-
+    ("pre_dawn", "clear"):  "images/pre_dawn_clear.png",
+    ("pre_dawn", "cloudy"): "images/pre_dawn_cloudy.png",
+    ("pre_dawn", "rain"):   "images/pre_dawn_rain.png",
+    ("pre_dawn", "snow"):   "images/pre_dawn_snow.png",
+    ("pre_dawn", "storm"):  "images/pre_dawn_storm.png",
     # SUNRISE
     ("sunrise", "clear"):   "images/morning_clear.png",
     ("sunrise", "cloudy"):  "images/morning_cloudy.png",
@@ -36,12 +36,11 @@ BACKGROUND_IMAGES = {
     ("sunrise", "storm"):   "images/morning_storm.png",
 
     # MORNING – AFTER SUNRISE
-    ("morning", "clear"):   "images/morning_clear.png",
-    ("morning", "cloudy"):  "images/morning_cloudy.png",
-    ("morning", "rain"):    "images/morning_rain.png",
-    ("morning", "snow"):    "images/morning_snow.png",
-    ("morning", "storm"):   "images/morning_storm.png",
-
+    ("morning", "clear"):   "images/after_morning_clear.png",
+    ("morning", "cloudy"):  "images/after_morning_cloudy.png",
+    ("morning", "rain"):    "images/after_morning_rain.png",
+    ("morning", "snow"):    "images/after_morning_snow.png",
+    ("morning", "storm"):   "images/after_morning_storm.png",
     # DAYTIME
     ("day", "clear"):       "images/day_clear.png",
     ("day", "cloudy"):      "images/day_cloudy.png",
@@ -63,6 +62,7 @@ BACKGROUND_IMAGES = {
     ("night", "snow"):      "images/night_snow.png",
     ("night", "storm"):     "images/night_storm.png",
 }
+
 
 
 
@@ -239,8 +239,8 @@ def on_weather(event):
         msg = (
             f"🌤 {weather['city']}, {weather['country']} @ {display_time}\n"
             f"🌡 Temp: {weather['temperature']}°C   "
-            f"💧 Humidity: {weather['humidity']}%   "
-            f"🌧 Precip: {weather['precipitation']} mm\n"
+            f"💧 Humidity: {weather['humidity']}%   \n"
+            # f"🌧 Precip: {weather['precipitation']} mm\n"
             f"🌈 Condition: {weather['condition'].capitalize()}"
         )
         weather_output.SetLabel(msg)
@@ -254,7 +254,7 @@ def on_convert(event):
 
     try:
         result = time_zone_converter(time_str, from_tz, to_tz)
-        output.SetLabel(f'📍 {from_tz} : {time_str}  ->  🎯 {to_tz} : {result}')
+        output.SetLabel(f'📍 {from_tz} : {time_str} \n 🎯 {to_tz} : {result}')
         time_background_converter_output()
     except Exception:
         output.SetLabel("Error: Invalid input or timezone")
@@ -265,14 +265,24 @@ def on_resize(event):
 
 # ---------------- UI SETUP (wxPython) ---------------- #
 
-# Layout constants keep the absolute positioning tidy.
-LEFT_MARGIN = 80
-CONTROL_WIDTH = 420
-CONTROL_HEIGHT = 32
-RIGHT_BUTTON_X = LEFT_MARGIN + CONTROL_WIDTH + 70
-BUTTON_WIDTH = 200
-BUTTON_HEIGHT = 38
-DISPLAY_WIDTH = 920
+# Layout constants tuned for a centered 16:9 (1440x810) canvas.
+# FRAME_WIDTH/HEIGHT: absolute frame size so background art scales predictably.
+# LEFT_MARGIN: horizontal offset that keeps the control column visually centered.
+# CONTROL_WIDTH/HEIGHT: baseline geometry for the text inputs + choices so they align.
+# COLUMN_GAP: spacing between the left column and the right-side action buttons.
+# RIGHT_BUTTON_X: computed anchor for buttons so they line up with inputs automatically.
+# BUTTON_WIDTH/HEIGHT: reusable dimensions for all push buttons to keep a consistent hit area.
+# DISPLAY_WIDTH: width allotted to multi-line labels such as the conversion + weather output.
+FRAME_WIDTH = 1440
+FRAME_HEIGHT = 810
+LEFT_MARGIN = 120
+CONTROL_WIDTH = 250
+CONTROL_HEIGHT = 36
+COLUMN_GAP = 90
+RIGHT_BUTTON_X = LEFT_MARGIN + CONTROL_WIDTH + COLUMN_GAP - 60
+BUTTON_WIDTH = 220
+BUTTON_HEIGHT = 42
+DISPLAY_WIDTH = 0
 
 # Preload all IANA zones so both dropdowns have identical lists.
 timezones = pytz.all_timezones
@@ -280,7 +290,7 @@ app = wx.App(False)
 frame = wx.Frame(
     None,
     title="Time & Weather Tool",
-    size=(1280, 720),
+    size=(FRAME_WIDTH, FRAME_HEIGHT),
     style=wx.DEFAULT_FRAME_STYLE
           & ~( wx.MAXIMIZE_BOX | wx.RESIZE_BORDER)
 )
@@ -291,42 +301,42 @@ bg_bitmap.Lower()  # Put it behind all other widgets
 panel.Bind(wx.EVT_SIZE, on_resize)
 
 # Time / Date
-show1 = wx.StaticText(panel, label="ENTER DATE & TIME", pos=(LEFT_MARGIN, 40))
-inputdt = wx.TextCtrl(panel, pos=(LEFT_MARGIN, 72), size=(CONTROL_WIDTH, CONTROL_HEIGHT), style=wx.SIMPLE_BORDER)
-inputdt.SetHint("YYYY-MM-DD HH:MM:SS e.g. 2007-02-22 12:00:00")
+show1 = wx.StaticText(panel, label="ENTER DATE AND TIME", pos=(LEFT_MARGIN, 70))
+inputdt = wx.TextCtrl(panel, pos=(LEFT_MARGIN, 108), size=(CONTROL_WIDTH, CONTROL_HEIGHT), style=wx.SIMPLE_BORDER)
+inputdt.SetHint("YYYY-MM-DD HH:MM:SS")
 nowtime = wx.Button(
     panel,
     label="CURRENT LOCAL",
-    pos=(RIGHT_BUTTON_X, 70),
+    pos=(RIGHT_BUTTON_X, 106),
     size=(BUTTON_WIDTH, BUTTON_HEIGHT),
     style=wx.BORDER_RAISED,
 )
 
 # Timezones
-show4 = wx.StaticText(panel, label="Select Source and Target Timezones", pos=(LEFT_MARGIN, 135))
-fromtz = wx.Choice(panel, choices=timezones, pos=(LEFT_MARGIN, 165), size=(CONTROL_WIDTH, 34), style=wx.BORDER_SUNKEN)
-totz = wx.Choice(panel, choices=timezones, pos=(LEFT_MARGIN, 210), size=(CONTROL_WIDTH, 34), style=wx.BORDER_SUNKEN)
+show4 = wx.StaticText(panel, label="Select Source and Target", pos=(LEFT_MARGIN, 190))
+fromtz = wx.Choice(panel, choices=timezones, pos=(LEFT_MARGIN, 228), size=(CONTROL_WIDTH, 36), style=wx.BORDER_SUNKEN)
+totz = wx.Choice(panel, choices=timezones, pos=(LEFT_MARGIN, 278), size=(CONTROL_WIDTH, 36), style=wx.BORDER_SUNKEN)
 
 convert = wx.Button(
     panel,
     label="CONVERT TIME",
-    pos=(RIGHT_BUTTON_X, 208),
+    pos=(RIGHT_BUTTON_X, 276),
     size=(BUTTON_WIDTH, BUTTON_HEIGHT),
     style=wx.BORDER_RAISED,
 )
-show5 = wx.StaticText(panel, label="CONVERTED TIME WILL APPEAR HERE ↓", pos=(LEFT_MARGIN, 270), style=wx.SIMPLE_BORDER)
-output = wx.StaticText(panel, label="", pos=(LEFT_MARGIN, 302), size=(DISPLAY_WIDTH, 40), style=wx.SIMPLE_BORDER)
+show5 = wx.StaticText(panel, label="RESULT ↓", pos=(LEFT_MARGIN, 352), style=wx.SIMPLE_BORDER)
+output = wx.StaticText(panel, label="", pos=(LEFT_MARGIN, 390), size=(DISPLAY_WIDTH, 0), style=wx.SIMPLE_BORDER)
 
 # Weather UI
-show_weather = wx.StaticText(panel, label="WEATHER", pos=(LEFT_MARGIN, 360))
+show_weather = wx.StaticText(panel, label="WEATHER", pos=(LEFT_MARGIN, 476))
 weather_btn = wx.Button(
     panel,
     label="GET WEATHER",
-    pos=(RIGHT_BUTTON_X, 350),
+    pos=(RIGHT_BUTTON_X, 466),
     size=(BUTTON_WIDTH, BUTTON_HEIGHT),
     style=wx.BORDER_RAISED,
 )
-weather_output = wx.StaticText(panel, label="", pos=(LEFT_MARGIN, 395), size=(DISPLAY_WIDTH, 90), style=wx.SIMPLE_BORDER)
+weather_output = wx.StaticText(panel, label="", pos=(LEFT_MARGIN, 516), size=(DISPLAY_WIDTH, 0), style=wx.SIMPLE_BORDER)
 
 
 # Bindings
