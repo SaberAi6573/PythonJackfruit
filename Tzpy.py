@@ -67,9 +67,10 @@ BASE_FONT_NAME = "Segoe Print"  # Soft handwritten font available on Windows.
 
 
 def apply_anime_font(widget, size=11, weight=wx.FONTWEIGHT_NORMAL):
-    """Apply a playful handwritten font to the given widget."""
+    """Apply the preferred handwritten font, falling back to a safe default if unavailable."""
     try:
-        font = wx.Font(  # Attempt preferred handwritten face first.
+        # Attempt preferred handwritten face first so the UI keeps a consistent style.
+        font = wx.Font(
             pointSize=size,
             family=wx.FONTFAMILY_SWISS,
             style=wx.FONTSTYLE_NORMAL,
@@ -78,12 +79,13 @@ def apply_anime_font(widget, size=11, weight=wx.FONTWEIGHT_NORMAL):
             faceName=BASE_FONT_NAME,
         )
     except Exception:
-        font = wx.Font(pointSize=size, family=wx.FONTFAMILY_SWISS, style=wx.FONTSTYLE_NORMAL, weight=weight)  # Fallback if font missing.
+        # If the system lacks the custom font, fall back to a generic face to avoid crashes.
+        font = wx.Font(pointSize=size, family=wx.FONTFAMILY_SWISS, style=wx.FONTSTYLE_NORMAL, weight=weight)
     widget.SetFont(font)  # Apply the resolved font to the widget.
 
 
 def time_zone_converter(time_str, from_tz, to_tz, time_format="%Y-%m-%d %H:%M:%S"):
-    """Parse `time_str`, localize it to `from_tz`, then return the formatted value in `to_tz`."""
+    """Localize the provided datetime to `from_tz`, convert it into `to_tz`, and return a formatted string."""
     from_timezone = pytz.timezone(from_tz)  # Source tz definition used for localization.
     to_timezone = pytz.timezone(to_tz)  # Destination tz definition for conversion target.
 
@@ -94,7 +96,7 @@ def time_zone_converter(time_str, from_tz, to_tz, time_format="%Y-%m-%d %H:%M:%S
     return converted_time.strftime(time_format)  # Return a string using the original format for UI display.
 
 def back_fore_ground(text_mode):
-    """Select artwork + text palette, then repaint the backdrop."""
+    """Select artwork + text palette, then repaint the backdrop to match both time bucket and weather."""
 
     global bg_bitmap, current_time_bucket, current_weather_condition, last_text_mode
     last_text_mode = text_mode  # Store mode so window resizes can reuse it.
@@ -134,7 +136,7 @@ def back_fore_ground(text_mode):
 
 
 def set_time_bucket_from_time(t_obj):
-    """Update time bucket and reapply background."""
+    """Translate a datetime.time into one of the themed buckets, then refresh the background."""
     global current_time_bucket
 
     if time(0, 0, 0) <= t_obj < time(4, 0, 0):
@@ -159,7 +161,7 @@ def set_time_bucket_from_time(t_obj):
     back_fore_ground(mode)
 
 def time_background_converter_output():
-    """Repaint the UI based on the converted time-of-day bucket."""
+    """Repaint the UI based on the converted time-of-day bucket after a successful conversion."""
     if not result:
         return
     try:
@@ -170,7 +172,7 @@ def time_background_converter_output():
 
 
 def time_background_converter_input():
-    """Change the background immediately as the user edits the time string."""
+    """Update the background live as the user types in the input box."""
     try:
         t = datetime.strptime(inputdt.GetValue(), "%Y-%m-%d %H:%M:%S").time()
         set_time_bucket_from_time(t)
@@ -180,16 +182,16 @@ def time_background_converter_input():
 
 
 def on_now(event):
-    """Prefill the controls with the current local timestamp."""
+    """Prefill the controls with the current local timestamp and preview the matching artwork."""
     now = datetime.now()
-    inputdt.SetValue(now.strftime("%Y-%m-%d %H:%M:%S"))
-    fromtz.SetStringSelection(get_localzone_name())
-    time_background_converter_input()
+    inputdt.SetValue(now.strftime("%Y-%m-%d %H:%M:%S"))  # Drop the freshly formatted time into the textbox.
+    fromtz.SetStringSelection(get_localzone_name())  # Sync the source dropdown to the OS timezone.
+    time_background_converter_input()  # Immediately refresh the background using the new time.
     
 
 
 def simple_frame(event=None):
-    """Sync globals with the latest widget values."""
+    """Sync globals with the latest widget values so downstream handlers read fresh data."""
     global time_str, from_tz, to_tz
     # Read the latest control values so conversions always use current input.
     time_str = inputdt.GetValue()
@@ -199,7 +201,7 @@ def simple_frame(event=None):
 
 
 def on_reset(event):
-    """Clear inputs and outputs so the next conversion starts fresh."""
+    """Clear all user inputs, reset theme state, and ready the UI for a new workflow."""
     global result, current_weather_condition
     inputdt.SetValue("")
     fromtz.SetSelection(wx.NOT_FOUND)
@@ -208,10 +210,10 @@ def on_reset(event):
     weather_output.SetLabel("")
     result = ""
     current_weather_condition = "clear"
-    set_time_bucket_from_time(datetime.now().time())
+    set_time_bucket_from_time(datetime.now().time())  # Restore default artwork using the current time bucket.
         
 def on_weather(event):
-    """Validate inputs, fetch hourly weather for the target zone, and render a compact summary."""
+    """Validate inputs, call the weather helper, then display and visualize the returned conditions."""
     dt_str_local = inputdt.GetValue().strip()  # Datetime string typed in the text box.
     if not dt_str_local:
         weather_output.SetLabel("Error: Enter datetime (YYYY-MM-DD HH:MM:SS)")
@@ -257,7 +259,7 @@ def on_weather(event):
         weather_output.SetLabel(f"Weather error: {e}")
         
 def on_convert(event):
-    """Run the main conversion and refresh the display."""
+    """Read the latest inputs, perform the timezone conversion, then update the UI + artwork."""
     simple_frame()
     global result
 
@@ -268,6 +270,7 @@ def on_convert(event):
     except Exception:
         output.SetLabel("Error: Invalid input or timezone")
 def on_resize(event):
+    """Keep the bitmap scaled to the window whenever the frame size changes."""
     back_fore_ground(last_text_mode)  # Rescale background art to the new panel dimensions.
     event.Skip()  # Allow default wx handling to continue.
 
@@ -294,8 +297,10 @@ RIGHT_MARGIN = 60
 BOTTOM_MARGIN = 60
 DISPLAY_WIDTH = 0
 
-# Preload all IANA zones so both dropdowns have identical lists.
+# Preload all IANA zones so both dropdowns mirror the same dataset.
 timezones = pytz.all_timezones
+
+# Bootstrap the wx application + frame (fixed size to maintain background composition).
 app = wx.App(False)
 frame = wx.Frame(
     None,
@@ -310,7 +315,7 @@ bg_bitmap = wx.StaticBitmap(panel, -1, wx.Bitmap(1, 1), pos=(0, 0))
 bg_bitmap.Lower()  # Put it behind all other widgets
 panel.Bind(wx.EVT_SIZE, on_resize)
 
-# Time / Date
+# --- Time / Date controls -------------------------------------------------
 show1 = wx.StaticText(panel, label="ENTER DATE AND TIME", pos=(LEFT_MARGIN, 70))
 inputdt = wx.TextCtrl(panel, pos=(LEFT_MARGIN, 108), size=(CONTROL_WIDTH, CONTROL_HEIGHT), style=wx.SIMPLE_BORDER)
 inputdt.SetHint("YYYY-MM-DD HH:MM:SS")
@@ -322,7 +327,7 @@ nowtime = wx.Button(
     style=wx.BORDER_RAISED,
 )
 
-# Timezones
+# --- Timezone selectors ---------------------------------------------------
 show4 = wx.StaticText(panel, label="Select Source and Target", pos=(LEFT_MARGIN, 190))
 fromtz = wx.Choice(panel, choices=timezones, pos=(LEFT_MARGIN, 228), size=(CONTROL_WIDTH, 36), style=wx.BORDER_SUNKEN)
 totz = wx.Choice(panel, choices=timezones, pos=(LEFT_MARGIN, 278), size=(CONTROL_WIDTH, 36), style=wx.BORDER_SUNKEN)
@@ -344,7 +349,7 @@ reset_btn = wx.Button(
 show5 = wx.StaticText(panel, label="RESULT ↓", pos=(LEFT_MARGIN, 352), style=wx.SIMPLE_BORDER)
 output = wx.StaticText(panel, label="", pos=(LEFT_MARGIN, 390), size=(DISPLAY_WIDTH, 0), style=wx.SIMPLE_BORDER)
 
-# Weather UI
+# --- Weather lookup UI ----------------------------------------------------
 show_weather = wx.StaticText(panel, label="WEATHER", pos=(LEFT_MARGIN, 476))
 weather_btn = wx.Button(
     panel,
@@ -356,7 +361,7 @@ weather_btn = wx.Button(
 weather_output = wx.StaticText(panel, label="", pos=(LEFT_MARGIN, 516), size=(DISPLAY_WIDTH, 0), style=wx.SIMPLE_BORDER)
 
 
-# Bindings
+# --- Event bindings -------------------------------------------------------
 inputdt.Bind(wx.EVT_TEXT, simple_frame)
 fromtz.Bind(wx.EVT_CHOICE, simple_frame)
 totz.Bind(wx.EVT_CHOICE, simple_frame)
@@ -387,7 +392,7 @@ button_widgets = [  # Action buttons that need consistent theming.
 ]
 
 for widget in text_widgets:
-    apply_anime_font(widget, size=12, weight=wx.FONTWEIGHT_MEDIUM)  # Use a slightly larger handwriting font for readability.
+    apply_anime_font(widget, size=12, weight=wx.FONTWEIGHT_MEDIUM)  # Keep labels readable while staying on-theme.
 
 for widget in input_widgets:
     apply_anime_font(widget, size=11)  # Keep inputs compact but on-theme.

@@ -58,8 +58,18 @@ python Tzpy.py
 - Weather lookups tested for both historical and future timestamps to ensure the correct Open-Meteo endpoint is chosen.
 - Background transitions exercised by forcing each time bucket through the input helper.
 
-## 🤔 Reflection / What I Learned
+## ⚠️ Problems Faced
+- **Weather API hour alignment:** Open-Meteo’s hourly data forced the minutes/seconds to stay at `00`; forgetting this triggered API errors until I added stricter input hints and validation.
+- **Timezone → location mapping:** translating IANA zones like `America/Argentina/Buenos_Aires` into a clean city name occasionally failed; I added fallback strings and error messages for unrecognized mappings.
+- **Background asset scaling:** large PNGs flickered while resizing; enabling double-buffering on the wx panel and caching the bitmap resolved the redraw artifacts.
+- **Transparent text experiments:** a custom `TransparentText` control caused wx assertions on some machines, so I reverted to `wx.StaticText` and focused on color contrast instead.
+- **Event signatures:** methods bound to widget events (like `simple_frame`) initially lacked the `event` parameter, leading to `TypeError` until I allowed optional arguments.
+
+##  Reflection / What I Learned
 Building this project taught me how valuable clean separation between GUI code and API helpers can be. I also gained confidence in handling asynchronous-style workflows inside a synchronous desktop app, especially when dealing with validation, error messages, and user feedback. Balancing visuals (dynamic art) with functionality gave me practice aligning user experience goals with software requirements.
+
+- While developing `weather_api.py`, I consulted internet documentation and tutorials to learn the correct sequence for Open-Meteo geocoding, forecast, and archive calls before adapting the logic to my project.
+- For the bitmap scaling and double-buffered background layer, I referenced online wxPython examples to understand how to keep transitions smooth and avoid flicker.
 
 ## 🔮 Future Improvements
 1. Persist the last-used settings so the app remembers my previous session.
