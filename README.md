@@ -1,48 +1,74 @@
 # PythonJackfruit
 
-> Final project submission prepared for my Computer Science teacher. The goal was to practice GUI work while combining API data sources in one workflow.
+> Computer Science project submission — a wxPython desktop assistant that combines time-zone conversion with weather insights in one interface.
 
-## Project Overview
+## 📚 Assignment Summary
+PythonJackfruit demonstrates how a Python GUI can orchestrate multiple data sources inside a single workflow. The objective was to design and code a desktop tool that:
+- Converts datetimes between arbitrary IANA time zones.
+- Fetches real-world weather data for the conversion target.
+- Reflects time-of-day and weather conditions through responsive background art.
 
-PythonJackfruit is a desktop helper that lets the user convert a datetime between two time zones and immediately request weather information for the target zone. The interface is built with wxPython, and background artwork shifts automatically to match the time bucket (night, sunrise, day, etc.) and reported weather condition. This keeps the UI visual but still focused on the data the assignment asked for.
+## 🎯 Learning Outcomes
+- Apply event-driven programming concepts using wxPython widgets and bindings.
+- Separate responsibilities across modules: `Tzpy.py` for presentation logic, `weather_api.py` for data acquisition.
+- Practice calling Open-Meteo’s Geocoding + Forecast/Archive APIs and handling validation errors gracefully.
+- Strengthen UX considerations by pairing data displays with visual cues (dynamic backgrounds).
 
-## Learning Targets
+## ✨ Feature Overview
+- **Time-Zone Conversion:** `pytz` handles localization and daylight-saving transitions so outputs remain accurate year-round.
+- **Weather Lookup:** Leverages Open-Meteo endpoints to summarize temperature, humidity, precipitation, and conditions that match the converted time.
+- **Dynamic Animated-Style Background:** Time buckets (pre-dawn, sunrise, morning, day, evening, night) cross-referenced with weather tags (clear, cloudy, rain, snow, storm) drive the background artwork selection.
+- **GUI System:** wxPython powers the 1440×810 interface, complete with custom fonts, instant field validation, and large buttons for classroom demonstrations.
 
-- Reinforce Python module design by separating the GUI (`Tzpy.py`) from the API helper (`weather_api.py`).
-- Practice calling public web APIs (Open-Meteo) and handling validation/edge cases.
-- Apply coordinate geometry from class (absolute positioning) to place controls on a 16:9 frame.
+## 🏗 How It Works (Architecture)
+Component | Role | Key Libraries
+--------- | ---- | ------------
+`Tzpy.py` | Main window, widget layout, conversion logic, background engine, event handlers (`on_now`, `on_convert`, `on_weather`, `on_reset`). | `wxPython`, `pytz`, `tzlocal`
+`weather_api.py` | Converts timezone strings into coordinates, calls Open-Meteo’s weather endpoints, classifies conditions for the UI theme. | `requests`
 
-## Feature Summary
+Data Flow:
+1. User enters a datetime and chooses source/target zones.
+2. `time_zone_converter` localizes the input, performs the conversion, and updates the result label.
+3. Weather lookups reuse the target zone to query Open-Meteo; responses populate the summary panel and feed the background selector.
+4. `set_time_bucket_from_time` + `current_weather_condition` determine which background image displays.
 
-1. Time zone conversion backed by `pytz`, including daylight-saving adjustments.
-2. "Current Local" shortcut pulls the machine’s zone using `tzlocal` to reduce typing mistakes.
-3. Weather lookup reuses the converted context so the user does not re-enter data.
-4. Dynamic background system selects artwork based on both time bucket and reported condition.
+## 🛠 Requirements & Installation
+- Python 3.10+
+- Packages: `wxPython`, `pytz`, `tzlocal`, `requests`
 
-## How to Run the Program
+```powershell
+pip install wxPython pytz tzlocal requests
+```
 
-1. Install Python 3.10 or newer.
-2. Install the required packages:
-   ```powershell
-   pip install wxPython pytz tzlocal requests
-   ```
-3. Run the GUI from the repository root:
-   ```powershell
-   python Tzpy.py
-   ```
-4. Enter a datetime in the format `YYYY-MM-DD HH:MM:SS`. Minutes and seconds should be `00` so they line up with the hourly weather data.
-5. Choose the source and destination time zones, then press **Convert Time**.
-6. Press **Get Weather** to fetch the hourly weather summary for the destination.
+## 🚀 Running the Application
+```powershell
+python Tzpy.py
+```
 
-## Testing and Verification
+### Example Usage
+1. Enter `2025-05-20 08:00:00` in the datetime field (minutes/seconds should be `00` to match hourly weather data).
+2. Set **From TZ** to `US/Eastern` and **To TZ** to `Asia/Tokyo`.
+3. Click **Convert Time** to view the localized result.
+4. Click **Get Weather** to fetch forecast/archived weather for Tokyo at the specified time.
+5. Watch the background artwork shift to a morning/rain scene if the API reports rain.
 
-- Manual tests covered conversions between local time, UTC, and a distant zone (e.g., Asia/Tokyo) to check DST handling.
-- Weather queries were issued for both future and past timestamps to confirm the helper switches between forecast and archive endpoints correctly.
-- Background images were checked by forcing each time bucket through the input field.
 
-## Reflection and Next Steps
+## ✅ Testing & Verification
+- Manually validated conversions across multiple continents and DST boundaries.
+- Weather lookups tested for both historical and future timestamps to ensure the correct Open-Meteo endpoint is chosen.
+- Background transitions exercised by forcing each time bucket through the input helper.
 
-- **What worked:** Keeping the GUI logic in one file and the API logic in another made debugging easier. Using absolute coordinates simplified the layout phase for this assignment.
-- **What I would improve next:** add input persistence so the program remembers the last-used time zones, and replace the absolute layout with wxPython sizers for better resizing support.
+## 🤔 Reflection / What I Learned
+Building this project taught me how valuable clean separation between GUI code and API helpers can be. I also gained confidence in handling asynchronous-style workflows inside a synchronous desktop app, especially when dealing with validation, error messages, and user feedback. Balancing visuals (dynamic art) with functionality gave me practice aligning user experience goals with software requirements.
 
-Thank you for reviewing this project. I am happy to walk through the code or demonstrate the workflow in class if needed.
+## 🔮 Future Improvements
+1. Persist the last-used settings so the app remembers my previous session.
+2. Replace absolute positioning with wxPython sizers to support window resizing.
+3. Add cached weather responses to reduce repeated API calls during testing.
+4. Include animated transitions when switching backgrounds for a smoother presentation feel.
+
+## 🙏 Acknowledgements
+- Open-Meteo for providing free Geocoding and Forecast/Archive APIs.
+- My Computer Science teacher for the rubric and guidance throughout the assignment.
+
+Thank you for reviewing PythonJackfruit. 

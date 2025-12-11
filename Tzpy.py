@@ -188,7 +188,7 @@ def on_now(event):
     
 
 
-def simple_frame():
+def simple_frame(event=None):
     """Sync globals with the latest widget values."""
     global time_str, from_tz, to_tz
     # Read the latest control values so conversions always use current input.
@@ -196,6 +196,19 @@ def simple_frame():
     time_background_converter_input()  # Update the background preview live while typing.
     from_tz = fromtz.GetStringSelection()
     to_tz = totz.GetStringSelection()
+
+
+def on_reset(event):
+    """Clear inputs and outputs so the next conversion starts fresh."""
+    global result, current_weather_condition
+    inputdt.SetValue("")
+    fromtz.SetSelection(wx.NOT_FOUND)
+    totz.SetSelection(wx.NOT_FOUND)
+    output.SetLabel("")
+    weather_output.SetLabel("")
+    result = ""
+    current_weather_condition = "clear"
+    set_time_bucket_from_time(datetime.now().time())
         
 def on_weather(event):
     """Validate inputs, fetch hourly weather for the target zone, and render a compact summary."""
@@ -266,6 +279,7 @@ def on_resize(event):
 # - LEFT_MARGIN, CONTROL_WIDTH/HEIGHT, and COLUMN_GAP place the input column.
 # - RIGHT_BUTTON_X is derived so action buttons line up with the inputs.
 # - BUTTON_WIDTH/HEIGHT give every button the same hit area.
+# - RIGHT_MARGIN/BOTTOM_MARGIN anchor the reset button in the lower-right corner.
 # - DISPLAY_WIDTH controls how wide the multiline output labels can grow.
 FRAME_WIDTH = 1440
 FRAME_HEIGHT = 810
@@ -276,6 +290,8 @@ COLUMN_GAP = 90
 RIGHT_BUTTON_X = LEFT_MARGIN + CONTROL_WIDTH + COLUMN_GAP - 60
 BUTTON_WIDTH = 220
 BUTTON_HEIGHT = 42
+RIGHT_MARGIN = 60
+BOTTOM_MARGIN = 60
 DISPLAY_WIDTH = 0
 
 # Preload all IANA zones so both dropdowns have identical lists.
@@ -318,6 +334,13 @@ convert = wx.Button(
     size=(BUTTON_WIDTH, BUTTON_HEIGHT),
     style=wx.BORDER_RAISED,
 )
+reset_btn = wx.Button(
+    panel,
+    label="RESET",
+    pos=(FRAME_WIDTH - RIGHT_MARGIN - BUTTON_WIDTH, FRAME_HEIGHT - BOTTOM_MARGIN - BUTTON_HEIGHT),
+    size=(BUTTON_WIDTH, BUTTON_HEIGHT),
+    style=wx.BORDER_RAISED,
+)
 show5 = wx.StaticText(panel, label="RESULT ↓", pos=(LEFT_MARGIN, 352), style=wx.SIMPLE_BORDER)
 output = wx.StaticText(panel, label="", pos=(LEFT_MARGIN, 390), size=(DISPLAY_WIDTH, 0), style=wx.SIMPLE_BORDER)
 
@@ -338,6 +361,7 @@ inputdt.Bind(wx.EVT_TEXT, simple_frame)
 fromtz.Bind(wx.EVT_CHOICE, simple_frame)
 totz.Bind(wx.EVT_CHOICE, simple_frame)
 convert.Bind(wx.EVT_BUTTON, on_convert)
+reset_btn.Bind(wx.EVT_BUTTON, on_reset)
 nowtime.Bind(wx.EVT_BUTTON, on_now)
 weather_btn.Bind(wx.EVT_BUTTON, on_weather)
 
@@ -357,6 +381,7 @@ input_widgets = [  # Controls that accept user input.
 ]
 button_widgets = [  # Action buttons that need consistent theming.
     convert,
+    reset_btn,
     nowtime,
     weather_btn,
 ]
