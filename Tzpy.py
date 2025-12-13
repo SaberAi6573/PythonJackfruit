@@ -22,44 +22,44 @@ current_weather_condition = "clear"    # clear, cloudy, rain, snow, storm
 # Keeping it as one dictionary lets back_fore_ground perform a single lookup per refresh.
 BACKGROUND_IMAGES = {
     # PRE-DAWN / NIGHT BEFORE SUNRISE
-    ("pre_dawn", "clear"):  "images/pre_dawn_clear.png",
-    ("pre_dawn", "cloudy"): "images/pre_dawn_cloudy.png",
-    ("pre_dawn", "rain"):   "images/pre_dawn_rain.png",
-    ("pre_dawn", "snow"):   "images/pre_dawn_snow.png",
-    ("pre_dawn", "storm"):  "images/pre_dawn_storm.png",
+    ("pre_dawn", "clear"):  "images_2/pre_dawn_clear.png",
+    ("pre_dawn", "cloudy"): "images_2/pre_dawn_cloudy.png",
+    ("pre_dawn", "rain"):   "images_2/pre_dawn_rain.png",
+    ("pre_dawn", "snow"):   "images_2/pre_dawn_snow.png",
+    ("pre_dawn", "storm"):  "images_2/pre_dawn_storm.png",
     # SUNRISE
-    ("sunrise", "clear"):   "images/morning_clear.png",
-    ("sunrise", "cloudy"):  "images/morning_cloudy.png",
-    ("sunrise", "rain"):    "images/morning_rain.png",
-    ("sunrise", "snow"):    "images/morning_snow.png",
-    ("sunrise", "storm"):   "images/morning_storm.png",
+    ("sunrise", "clear"):   "images_2/morning_clear.png",
+    ("sunrise", "cloudy"):  "images_2/morning_cloudy.png",
+    ("sunrise", "rain"):    "images_2/morning_rain.png",
+    ("sunrise", "snow"):    "images_2/morning_snow.png",
+    ("sunrise", "storm"):   "images_2/morning_storm.png",
 
     # MORNING – AFTER SUNRISE
-    ("morning", "clear"):   "images/after_morning_clear.png",
-    ("morning", "cloudy"):  "images/after_morning_cloudy.png",
-    ("morning", "rain"):    "images/after_morning_rain.png",
-    ("morning", "snow"):    "images/after_morning_snow.png",
-    ("morning", "storm"):   "images/after_morning_storm.png",
+    ("morning", "clear"):   "images_2/after_morning_clear.png",
+    ("morning", "cloudy"):  "images_2/after_morning_cloudy.png",
+    ("morning", "rain"):    "images_2/after_morning_rain.png",
+    ("morning", "snow"):    "images_2/after_morning_snow.png",
+    ("morning", "storm"):   "images_2/after_morning_storm.png",
     # DAYTIME
-    ("day", "clear"):       "images/day_clear.png",
-    ("day", "cloudy"):      "images/day_cloudy.png",
-    ("day", "rain"):        "images/day_rain.png",
-    ("day", "snow"):        "images/day_snow.png",
-    ("day", "storm"):       "images/day_storm.png",
+    ("day", "clear"):       "images_2/day_clear.png",
+    ("day", "cloudy"):      "images_2/day_cloudy.png",
+    ("day", "rain"):        "images_2/day_rain.png",
+    ("day", "snow"):        "images_2/day_snow.png",
+    ("day", "storm"):       "images_2/day_storm.png",
 
     # EVENING / SUNSET
-    ("evening", "clear"):   "images/evening_clear.png",
-    ("evening", "cloudy"):  "images/evening_cloudy.png",
-    ("evening", "rain"):    "images/evening_rain.png",
-    ("evening", "snow"):    "images/evening_snow.png",
-    ("evening", "storm"):   "images/evening_storm.png",
+    ("evening", "clear"):   "images_2/evening_clear.png",
+    ("evening", "cloudy"):  "images_2/evening_cloudy.png",
+    ("evening", "rain"):    "images_2/evening_rain.png",
+    ("evening", "snow"):    "images_2/evening_snow.png",
+    ("evening", "storm"):   "images_2/evening_storm.png",
 
     # NIGHT TIME
-    ("night", "clear"):     "images/night_clear.png",
-    ("night", "cloudy"):    "images/night_cloudy.png",
-    ("night", "rain"):      "images/night_rain.png",
-    ("night", "snow"):      "images/night_snow.png",
-    ("night", "storm"):     "images/night_storm.png",
+    ("night", "clear"):     "images_2/night_clear.png",
+    ("night", "cloudy"):    "images_2/night_cloudy.png",
+    ("night", "rain"):      "images_2/night_rain.png",
+    ("night", "snow"):      "images_2/night_snow.png",
+    ("night", "storm"):     "images_2/night_storm.png",
 }
 
 # Font helper keeps headings consistent without repeating the wx.Font setup.
