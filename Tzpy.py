@@ -66,7 +66,7 @@ BACKGROUND_IMAGES = {
 BASE_FONT_NAME = "Segoe Print"  # Soft handwritten font available on Windows.
 
 
-def apply_anime_font(widget, size=11, weight=wx.FONTWEIGHT_NORMAL):
+def apply_font(widget, size=11, weight=wx.FONTWEIGHT_NORMAL):
     """Apply the preferred handwritten font, falling back to a safe default if unavailable."""
     try:
         # Attempt preferred handwritten face first so the UI keeps a consistent style.
@@ -392,16 +392,16 @@ button_widgets = [  # Action buttons that need consistent theming.
 ]
 
 for widget in text_widgets:
-    apply_anime_font(widget, size=12, weight=wx.FONTWEIGHT_MEDIUM)  # Keep labels readable while staying on-theme.
+    apply_font(widget, size=12, weight=wx.FONTWEIGHT_MEDIUM)  # Keep labels readable while staying on-theme.
 
 for widget in input_widgets:
-    apply_anime_font(widget, size=11)  # Keep inputs compact but on-theme.
-
+    apply_font(widget, size=11)  # Keep inputs compact but on-theme.
+    
 for widget in button_widgets:
-    apply_anime_font(widget, size=11, weight=wx.FONTWEIGHT_BOLD)  # Bold buttons for emphasis.
+    apply_font(widget, size=11, weight=wx.FONTWEIGHT_BOLD)  # Bold buttons for emphasis.
 
-apply_anime_font(output, size=13, weight=wx.FONTWEIGHT_MEDIUM)  # Highlight the main conversion result.
-apply_anime_font(weather_output, size=12)  # Weather summary uses slightly larger text.
+apply_font(output, size=13, weight=wx.FONTWEIGHT_MEDIUM)  # Highlight the main conversion result.
+apply_font(weather_output, size=12)  # Weather summary uses slightly larger text.
 
 
 frame.Show()  # Display the fully configured window.
