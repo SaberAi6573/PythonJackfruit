@@ -7,12 +7,12 @@ from tzlocal import get_localzone_name  # OS timezone helper for the "Current Lo
 import weather_api as wa  # Project weather helpers.
 
 # --- Global UI State ------------------------------------------------------
-result = ""  # Most recent converted timestamp shown in the UI.
-text_widgets = []  # Static labels whose colours update with the theme.
-input_widgets = []  # Inputs that share hint text, fonts, and palette updates.
-button_widgets = []  # Buttons grouped for consistent styling.
-last_text_mode = "light"  # Remembers which palette was last applied.
-bg_bitmap = None  # wx.StaticBitmap instance responsible for the artwork layer.
+result = ""  # Stores the latest converted timestamp (also feeds weather lookups + background shifts).
+text_widgets = []  # Static labels whose colours update when the palette flips.
+input_widgets = []  # Inputs that need shared hints, fonts, and live palette updates.
+button_widgets = []  # Buttons grouped so they switch colours together.
+last_text_mode = "light"  # Captures the active palette so resize events can reapply it.
+bg_bitmap = None  # wx.StaticBitmap instance responsible for the hero artwork layer.
 
 # --- Background Image System ---
 current_time_bucket = "night"          # pre_dawn, sunrise, morning, day, evening, night
@@ -63,11 +63,11 @@ BACKGROUND_IMAGES = {
 }
 
 # Font helper keeps headings consistent without repeating the wx.Font setup.
-BASE_FONT_NAME = "Segoe Print"  # Soft handwritten font available on Windows.
+BASE_FONT_NAME = "Segoe Print"  # Soft handwritten font that matches the illustrated backgrounds.
 
 
 def apply_font(widget, size=11, weight=wx.FONTWEIGHT_NORMAL):
-    """Apply the preferred handwritten font, falling back to a safe default if unavailable."""
+    """Apply the themed handwritten font, falling back to a safe default if the face is missing."""
     try:
         # Attempt preferred handwritten face first so the UI keeps a consistent style.
         font = wx.Font(
@@ -96,7 +96,7 @@ def time_zone_converter(time_str, from_tz, to_tz, time_format="%Y-%m-%d %H:%M:%S
     return converted_time.strftime(time_format)  # Return a string using the original format for UI display.
 
 def back_fore_ground(text_mode):
-    """Select artwork + text palette, then repaint the backdrop to match both time bucket and weather."""
+    """Swap in the correct background image and palette for the active time bucket + weather condition."""
 
     global bg_bitmap, current_time_bucket, current_weather_condition, last_text_mode
     last_text_mode = text_mode  # Store mode so window resizes can reuse it.
@@ -172,7 +172,7 @@ def time_background_converter_output():
 
 
 def time_background_converter_input():
-    """Update the background live as the user types in the input box."""
+    """Update the background live as the user types so the preview mirrors the entered hour."""
     try:
         t = datetime.strptime(inputdt.GetValue(), "%Y-%m-%d %H:%M:%S").time()
         set_time_bucket_from_time(t)
@@ -190,18 +190,19 @@ def on_now(event):
     
 
 
-def simple_frame(event=None):
-    """Sync globals with the latest widget values so downstream handlers read fresh data."""
+def simple_frame(event=None, update_preview=True):
+    """Sync globals with the latest widget values, optionally skipping the live preview repaint."""
     global time_str, from_tz, to_tz
     # Read the latest control values so conversions always use current input.
     time_str = inputdt.GetValue()
-    time_background_converter_input()  # Update the background preview live while typing.
+    if update_preview:
+        time_background_converter_input()  # Update the background preview live while typing.
     from_tz = fromtz.GetStringSelection()
     to_tz = totz.GetStringSelection()
 
 
 def on_reset(event):
-    """Clear all user inputs, reset theme state, and ready the UI for a new workflow."""
+    """Clear all user inputs, reset theme state, and return the artwork to the current real-world bucket."""
     global result, current_weather_condition
     inputdt.SetValue("")
     fromtz.SetSelection(wx.NOT_FOUND)
@@ -213,36 +214,34 @@ def on_reset(event):
     set_time_bucket_from_time(datetime.now().time())  # Restore default artwork using the current time bucket.
         
 def on_weather(event):
-    """Validate inputs, call the weather helper, then display and visualize the returned conditions."""
-    dt_str_local = inputdt.GetValue().strip()  # Datetime string typed in the text box.
-    if not dt_str_local:
-        weather_output.SetLabel("Error: Enter datetime (YYYY-MM-DD HH:MM:SS)")
-        return
+    """Fetch weather for the converted timestamp, then repaint the scene using that hour + condition."""
+    simple_frame(update_preview=False)  # Refresh selections without repainting from raw input time.
+    global result, current_weather_condition
 
     tz_name = totz.GetStringSelection()  # Target timezone drives the weather lookup.
     if not tz_name:
         weather_output.SetLabel("Error: Select a target timezone (To TZ) for weather.")
         return
 
+    if not result:
+        weather_output.SetLabel("Error: Convert the time first so we know the target datetime.")
+        return
+
+    dt_str_target = result  # Always query weather for the converted timestamp in the destination timezone.
+
     try:
-        datetime.strptime(dt_str_local, "%Y-%m-%d %H:%M:%S")  # Format validation before hitting the API.
+        datetime.strptime(dt_str_target, "%Y-%m-%d %H:%M:%S")  # Validate format before hitting the API.
     except ValueError:
-        weather_output.SetLabel("Error: Invalid datetime format.")
+        weather_output.SetLabel("Error: Converted datetime is invalid. Re-run the conversion.")
         return
 
     try:
-        weather = wa.get_weather_for_datetime(dt_str_local, tz_name)  # Delegate to Open-Meteo helper.
+        weather = wa.get_weather_for_datetime(dt_str_target, tz_name)  # Delegate to Open-Meteo helper.
 
-        # Save the parsed condition tag so the background can mirror rain/snow/storm visuals.
-        global current_weather_condition
         current_weather_condition = weather.get("condition", "clear")
 
-        # Reapply background so visuals match the reported condition.
         try:
-            if result:
-                t_obj = datetime.strptime(result, "%Y-%m-%d %H:%M:%S").time()
-            else:
-                t_obj = datetime.strptime(dt_str_local, "%Y-%m-%d %H:%M:%S").time()
+            t_obj = datetime.strptime(dt_str_target, "%Y-%m-%d %H:%M:%S").time()
             set_time_bucket_from_time(t_obj)
         except Exception:
             pass
@@ -251,7 +250,6 @@ def on_weather(event):
             f"🌤 {weather['city']}, {weather['country']} @ {display_time}\n"
             f"🌡 Temp: {weather['temperature']}°C   "
             f"💧 Humidity: {weather['humidity']}%   \n"
-            # f"🌧 Precip: {weather['precipitation']} mm\n"
             f"🌈 Condition: {weather['condition'].capitalize()}"
         )
         weather_output.SetLabel(msg)
@@ -278,12 +276,12 @@ def on_resize(event):
 # ---------------- UI SETUP (wxPython) ---------------- #
 
 # Layout constants for the fixed 1440x810 frame:
-# - FRAME_WIDTH/HEIGHT keep the background art scaling predictable.
-# - LEFT_MARGIN, CONTROL_WIDTH/HEIGHT, and COLUMN_GAP place the input column.
-# - RIGHT_BUTTON_X is derived so action buttons line up with the inputs.
-# - BUTTON_WIDTH/HEIGHT give every button the same hit area.
-# - RIGHT_MARGIN/BOTTOM_MARGIN anchor the reset button in the lower-right corner.
-# - DISPLAY_WIDTH controls how wide the multiline output labels can grow.
+# - FRAME_WIDTH/HEIGHT keep the backdrop artwork scaling predictable.
+# - LEFT_MARGIN, CONTROL_WIDTH/HEIGHT, and COLUMN_GAP define the input column footprint.
+# - RIGHT_BUTTON_X is derived so action buttons align with the text fields.
+# - BUTTON_WIDTH/HEIGHT keep hit areas consistent.
+# - RIGHT_MARGIN/BOTTOM_MARGIN anchor the reset button near the corner.
+# - DISPLAY_WIDTH caps how wide multiline labels grow.
 FRAME_WIDTH = 1440
 FRAME_HEIGHT = 810
 LEFT_MARGIN = 120
@@ -371,7 +369,7 @@ nowtime.Bind(wx.EVT_BUTTON, on_now)
 weather_btn.Bind(wx.EVT_BUTTON, on_weather)
 
 # Widgets participating in theme swaps
-text_widgets = [  # Static labels and outputs that follow theme colours.
+text_widgets = [  # Static labels + outputs that pivot between light/dark palettes.
     show1,
     show4,
     show5,
@@ -379,12 +377,12 @@ text_widgets = [  # Static labels and outputs that follow theme colours.
     show_weather,
     weather_output,
 ]
-input_widgets = [  # Controls that accept user input.
+input_widgets = [  # Controls that accept user input (and need matching fonts/palettes).
     inputdt,
     fromtz,
     totz,
 ]
-button_widgets = [  # Action buttons that need consistent theming.
+button_widgets = [  # Action buttons that also flip colours together.
     convert,
     reset_btn,
     nowtime,
